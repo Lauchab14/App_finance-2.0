@@ -1,0 +1,710 @@
+"""
+app.py — Application Streamlit : Analyseur de Rentabilité Immobilière v2.0
+"""
+import streamlit as st
+import pandas as pd
+import plotly.graph_objects as go
+import plotly.express as px
+
+from config import (
+    AMORTISSEMENT_DEFAUT,
+    MISE_DE_FONDS_PCT_DEFAUT,
+    TAUX_INTERET_DEFAUT,
+    TAUX_VACANCE_DEFAUT,
+    INFLATION_DEPENSES_DEFAUT,
+    CROISSANCE_LOYERS_DEFAUT,
+    APPRECIATION_DEFAUT,
+    TAUX_ACTUALISATION_DEFAUT,
+    TAUX_MUNICIPAUX,
+    FRAIS_NOTAIRE_DEFAUT,
+    FRAIS_INSPECTION_DEFAUT,
+    FRAIS_EVALUATION_DEFAUT,
+    REGIONS,
+    CRITERES_LOCALISATION,
+)
+from finance import (
+    analyser_annee1,
+    projeter_10_ans,
+    calculer_ratios,
+    expliquer_ratio,
+    generer_recommandation,
+)
+from location import calculer_score_localisation, creer_graphique_radar
+
+# =============================================================================
+# CONFIGURATION DE LA PAGE
+# =============================================================================
+st.set_page_config(
+    page_title="Analyseur de Rentabilité Immobilière",
+    page_icon="🏠",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# =============================================================================
+# CSS PERSONNALISÉ
+# =============================================================================
+st.markdown(
+    """
+    <style>
+    /* Thème sombre premium */
+    .main .block-container {
+        padding-top: 1.5rem;
+        max-width: 1200px;
+    }
+
+    /* Carte métrique */
+    .metric-card {
+        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+        border: 1px solid rgba(99, 110, 250, 0.3);
+        border-radius: 12px;
+        padding: 1.2rem;
+        text-align: center;
+        margin-bottom: 0.5rem;
+    }
+    .metric-card h3 {
+        color: #a0a0b8;
+        font-size: 0.85rem;
+        margin: 0 0 0.3rem 0;
+        font-weight: 400;
+    }
+    .metric-card .value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        margin: 0;
+    }
+    .metric-card .value.positive { color: #4ade80; }
+    .metric-card .value.negative { color: #f87171; }
+    .metric-card .value.neutral  { color: #636EFA; }
+
+    /* Ratio card */
+    .ratio-card {
+        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
+        border: 1px solid rgba(99, 110, 250, 0.2);
+        border-radius: 12px;
+        padding: 1.2rem;
+        margin-bottom: 1rem;
+    }
+    .ratio-card .ratio-name {
+        color: #c0c0d8;
+        font-size: 0.9rem;
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+    }
+    .ratio-card .ratio-value {
+        font-size: 1.8rem;
+        font-weight: 700;
+        margin-bottom: 0.3rem;
+    }
+    .ratio-card .ratio-desc {
+        color: #8888a8;
+        font-size: 0.78rem;
+        margin-bottom: 0.4rem;
+        font-style: italic;
+    }
+    .ratio-card .ratio-interp {
+        font-size: 0.85rem;
+        padding: 0.5rem 0.7rem;
+        border-radius: 8px;
+        background: rgba(0,0,0,0.2);
+    }
+
+    /* Score localisation */
+    .score-badge {
+        display: inline-block;
+        font-size: 2.4rem;
+        font-weight: 800;
+        padding: 0.5rem 1.2rem;
+        border-radius: 16px;
+        margin: 0.5rem 0;
+    }
+    .score-badge.high   { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 2px solid #4ade80; }
+    .score-badge.medium { background: rgba(250, 204, 21, 0.15); color: #facc15; border: 2px solid #facc15; }
+    .score-badge.low    { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 2px solid #f87171; }
+
+    /* Titre principal */
+    .app-title {
+        text-align: center;
+        padding: 0.5rem 0 1rem 0;
+    }
+    .app-title h1 {
+        font-size: 1.8rem;
+        background: linear-gradient(90deg, #636EFA, #EE553B);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        margin: 0;
+    }
+    .app-title p {
+        color: #8888a8;
+        font-size: 0.9rem;
+        margin: 0.2rem 0 0 0;
+    }
+
+    /* Sidebar info box */
+    .info-box {
+        background: rgba(99, 110, 250, 0.1);
+        border: 1px solid rgba(99, 110, 250, 0.3);
+        border-radius: 8px;
+        padding: 0.7rem;
+        font-size: 0.82rem;
+        color: #a0a0d0;
+        margin-top: 0.5rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# =============================================================================
+# TITRE
+# =============================================================================
+st.markdown(
+    """
+    <div class="app-title">
+        <h1>🏠 Analyseur de Rentabilité Immobilière</h1>
+        <p>Analyse complète d'un immeuble à revenus — Québec</p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# =============================================================================
+# SIDEBAR — HYPOTHÈSES
+# =============================================================================
+with st.sidebar:
+    st.header("⚙️ Hypothèses")
+
+    st.subheader("Hypothèque")
+    taux_interet = st.number_input(
+        "Taux d'intérêt (%)", min_value=0.0, max_value=15.0,
+        value=TAUX_INTERET_DEFAUT, step=0.25, format="%.2f",
+    )
+    amortissement = st.number_input(
+        "Amortissement (années)", min_value=5, max_value=40,
+        value=AMORTISSEMENT_DEFAUT, step=5,
+    )
+    mise_de_fonds_pct = st.number_input(
+        "Mise de fonds (%)", min_value=0.0, max_value=100.0,
+        value=MISE_DE_FONDS_PCT_DEFAUT, step=5.0, format="%.1f",
+    )
+    st.markdown(
+        '<div class="info-box">💡 <b>APH Select</b> : amortissement jusqu\'à 40 ans '
+        "et mise de fonds dès 5%.</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+    st.subheader("Projections")
+    taux_vacance = st.number_input(
+        "Taux de vacance (%)", min_value=0.0, max_value=30.0,
+        value=TAUX_VACANCE_DEFAUT, step=1.0, format="%.1f",
+    )
+    croissance_loyers = st.number_input(
+        "Croissance annuelle des loyers (%)", min_value=0.0, max_value=10.0,
+        value=CROISSANCE_LOYERS_DEFAUT, step=0.5, format="%.1f",
+    )
+    inflation_depenses = st.number_input(
+        "Inflation annuelle des dépenses (%)", min_value=0.0, max_value=10.0,
+        value=INFLATION_DEPENSES_DEFAUT, step=0.5, format="%.1f",
+    )
+    appreciation = st.number_input(
+        "Appréciation annuelle de la valeur (%)", min_value=-5.0, max_value=15.0,
+        value=APPRECIATION_DEFAUT, step=0.5, format="%.1f",
+    )
+    taux_actualisation = st.number_input(
+        "Taux d'actualisation – VAN (%)", min_value=1.0, max_value=20.0,
+        value=TAUX_ACTUALISATION_DEFAUT, step=0.5, format="%.1f",
+    )
+
+# =============================================================================
+# SECTION 1 — INFORMATIONS DE L'IMMEUBLE
+# =============================================================================
+st.header("📋 Informations de l'immeuble")
+
+col1, col2 = st.columns(2)
+with col1:
+    adresse = st.text_input("Adresse de l'immeuble", placeholder="123 rue Exemple, Québec")
+    ville = st.selectbox("Ville", options=list(TAUX_MUNICIPAUX.keys()))
+
+    if ville == "Autre (entrer manuellement)":
+        taux_municipal = st.number_input(
+            "Taux de taxation municipal (par 100$)", min_value=0.0,
+            max_value=3.0, value=0.80, step=0.01, format="%.4f",
+        )
+    else:
+        taux_municipal = TAUX_MUNICIPAUX[ville]
+        st.info(f"Taux municipal : **{taux_municipal:.4f}$ / 100$**")
+
+with col2:
+    prix_achat = st.number_input(
+        "Prix d'achat ($)", min_value=0, value=500_000, step=5_000, format="%d",
+    )
+    evaluation_municipale = st.number_input(
+        "Évaluation municipale ($)", min_value=0, value=400_000, step=5_000, format="%d",
+    )
+    nb_logements = st.number_input(
+        "Nombre de logements", min_value=1, max_value=50, value=4, step=1,
+    )
+
+# --- LOYERS : Total ou Détaillé ---
+st.subheader("💰 Revenus de loyers")
+mode_loyer = st.radio(
+    "Mode de saisie des loyers",
+    options=["Total mensuel", "Détaillé par logement"],
+    horizontal=True,
+)
+
+if mode_loyer == "Total mensuel":
+    loyers_total = st.number_input(
+        "Loyer mensuel total ($)", min_value=0, value=3_600, step=100, format="%d",
+    )
+    loyers_details = None
+else:
+    st.caption("Entrez le loyer mensuel de chaque logement :")
+    cols = st.columns(min(nb_logements, 4))
+    loyers_details = []
+    for i in range(nb_logements):
+        with cols[i % len(cols)]:
+            loyer_i = st.number_input(
+                f"Logement {i + 1} ($)", min_value=0, value=900, step=50,
+                format="%d", key=f"loyer_{i}",
+            )
+            loyers_details.append(loyer_i)
+    loyers_total = sum(loyers_details)
+    st.success(f"**Total mensuel : {loyers_total:,.0f}$**")
+
+# =============================================================================
+# SECTION 2 — DÉPENSES
+# =============================================================================
+st.header("📊 Dépenses annuelles")
+col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+
+with col_d1:
+    assurance = st.number_input("Assurance ($)", min_value=0, value=2_500, step=100, format="%d")
+with col_d2:
+    entretien = st.number_input("Entretien ($)", min_value=0, value=3_000, step=100, format="%d")
+with col_d3:
+    gestion = st.number_input("Gestion ($)", min_value=0, value=0, step=100, format="%d")
+with col_d4:
+    autres_depenses = st.number_input("Autres ($)", min_value=0, value=500, step=100, format="%d")
+
+# =============================================================================
+# SECTION 3 — FRAIS D'ACQUISITION
+# =============================================================================
+st.header("🏷️ Frais d'acquisition (année 1)")
+col_f1, col_f2, col_f3 = st.columns(3)
+
+with col_f1:
+    frais_notaire = st.number_input(
+        "Notaire ($)", min_value=0, value=FRAIS_NOTAIRE_DEFAUT, step=100, format="%d",
+    )
+with col_f2:
+    frais_inspection = st.number_input(
+        "Inspection ($)", min_value=0, value=FRAIS_INSPECTION_DEFAUT, step=100, format="%d",
+    )
+with col_f3:
+    frais_evaluation = st.number_input(
+        "Évaluation ($)", min_value=0, value=FRAIS_EVALUATION_DEFAUT, step=100, format="%d",
+    )
+
+# =============================================================================
+# CALCULS
+# =============================================================================
+resultats = analyser_annee1(
+    prix_achat=prix_achat,
+    evaluation_municipale=evaluation_municipale,
+    taux_municipal_par_100=taux_municipal,
+    ville=ville,
+    loyers_mensuels_total=loyers_total,
+    taux_vacance=taux_vacance,
+    assurance=assurance,
+    entretien=entretien,
+    gestion=gestion,
+    autres_depenses=autres_depenses,
+    taux_interet=taux_interet,
+    amortissement=amortissement,
+    mise_de_fonds_pct=mise_de_fonds_pct,
+    frais_notaire=frais_notaire,
+    frais_inspection=frais_inspection,
+    frais_evaluation=frais_evaluation,
+)
+
+projection = projeter_10_ans(
+    prix_achat=prix_achat,
+    montant_pret=resultats["montant_pret"],
+    paiement_mensuel=resultats["paiement_mensuel"],
+    revenus_nets_an1=resultats["revenus_nets"],
+    depenses_an1=resultats["depenses_totales"],
+    frais_acquisition=resultats["frais_acquisition"],
+    mise_de_fonds=resultats["mise_de_fonds"],
+    taux_interet=taux_interet,
+    croissance_loyers=croissance_loyers,
+    inflation_depenses=inflation_depenses,
+    appreciation=appreciation,
+)
+
+mise_de_fonds_totale = resultats["mise_de_fonds"] + resultats["frais_acquisition"]
+ratios = calculer_ratios(
+    prix_achat=prix_achat,
+    noi=resultats["noi"],
+    cashflow_annee1=resultats["cashflow_avant_frais"],
+    mise_de_fonds_totale=mise_de_fonds_totale,
+    revenus_bruts=resultats["revenus_bruts_annuels"],
+    paiement_annuel=resultats["paiement_annuel"],
+    cashflows_irr=projection["cashflows_irr"],
+    taux_actualisation=taux_actualisation,
+)
+
+# =============================================================================
+# ONGLETS D'ANALYSE
+# =============================================================================
+st.divider()
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["📈 Analyse Année 1", "📊 Projection 10 ans", "📍 Localisation", "🎯 Ratios & Recommandation"]
+)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 1 — ANALYSE ANNÉE 1
+# ─────────────────────────────────────────────────────────────────────────────
+with tab1:
+    st.subheader("Résumé financier — Année 1")
+
+    # Métriques clés
+    m1, m2, m3, m4 = st.columns(4)
+
+    def metric_html(titre, valeur, classe="neutral"):
+        return (
+            f'<div class="metric-card"><h3>{titre}</h3>'
+            f'<p class="value {classe}">{valeur}</p></div>'
+        )
+
+    with m1:
+        st.markdown(metric_html("Mise de fonds", f"{resultats['mise_de_fonds']:,.0f}$"), unsafe_allow_html=True)
+    with m2:
+        st.markdown(metric_html("Paiement mensuel", f"{resultats['paiement_mensuel']:,.0f}$"), unsafe_allow_html=True)
+    with m3:
+        cf_class = "positive" if resultats["cashflow_avant_frais"] >= 0 else "negative"
+        st.markdown(metric_html("Cashflow annuel", f"{resultats['cashflow_avant_frais']:,.0f}$", cf_class), unsafe_allow_html=True)
+    with m4:
+        cf_class = "positive" if resultats["cashflow_avant_frais"] / 12 >= 0 else "negative"
+        st.markdown(metric_html("Cashflow mensuel", f"{resultats['cashflow_avant_frais'] / 12:,.0f}$", cf_class), unsafe_allow_html=True)
+
+    st.divider()
+
+    col_rev, col_dep = st.columns(2)
+
+    with col_rev:
+        st.subheader("Revenus")
+        st.write(f"- Loyers bruts annuels : **{resultats['revenus_bruts_annuels']:,.0f}$**")
+        st.write(f"- Vacance ({taux_vacance:.1f}%) : **-{resultats['revenus_bruts_annuels'] - resultats['revenus_nets']:,.0f}$**")
+        st.write(f"- **Revenus nets : {resultats['revenus_nets']:,.0f}$**")
+
+    with col_dep:
+        st.subheader("Dépenses")
+        st.write(f"- Taxes municipales : **{resultats['taxes_municipales']:,.0f}$**")
+        st.write(f"- Taxes scolaires : **{resultats['taxes_scolaires']:,.0f}$**")
+        st.write(f"- Assurance : **{assurance:,.0f}$**")
+        st.write(f"- Entretien : **{entretien:,.0f}$**")
+        if gestion > 0:
+            st.write(f"- Gestion : **{gestion:,.0f}$**")
+        if autres_depenses > 0:
+            st.write(f"- Autres : **{autres_depenses:,.0f}$**")
+        st.write(f"- **Total dépenses : {resultats['depenses_totales']:,.0f}$**")
+
+    # Graphique donut des dépenses
+    st.divider()
+    st.subheader("Répartition des dépenses annuelles")
+
+    dep_labels = ["Taxes municipales", "Taxes scolaires", "Assurance", "Entretien", "Hypothèque (intérêts)"]
+    dep_values = [
+        resultats["taxes_municipales"],
+        resultats["taxes_scolaires"],
+        assurance,
+        entretien,
+        resultats["interet_annee1"],
+    ]
+    if gestion > 0:
+        dep_labels.append("Gestion")
+        dep_values.append(gestion)
+    if autres_depenses > 0:
+        dep_labels.append("Autres")
+        dep_values.append(autres_depenses)
+
+    fig_donut = go.Figure(
+        data=[
+            go.Pie(
+                labels=dep_labels,
+                values=dep_values,
+                hole=0.5,
+                textinfo="label+percent",
+                marker=dict(
+                    colors=px.colors.qualitative.Set2[: len(dep_labels)]
+                ),
+            )
+        ]
+    )
+    fig_donut.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="white"),
+        height=400,
+        showlegend=False,
+        margin=dict(t=20, b=20),
+    )
+    st.plotly_chart(fig_donut, use_container_width=True)
+
+    # Frais d'acquisition
+    st.divider()
+    st.subheader("Frais d'acquisition (non récurrents)")
+    fa1, fa2, fa3, fa4, fa5 = st.columns(5)
+    with fa1:
+        st.metric("Droits de mutation", f"{resultats['droits_mutation']:,.0f}$")
+    with fa2:
+        st.metric("Notaire", f"{frais_notaire:,.0f}$")
+    with fa3:
+        st.metric("Inspection", f"{frais_inspection:,.0f}$")
+    with fa4:
+        st.metric("Évaluation", f"{frais_evaluation:,.0f}$")
+    with fa5:
+        st.metric("**Total**", f"{resultats['frais_acquisition']:,.0f}$")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 2 — PROJECTION 10 ANS
+# ─────────────────────────────────────────────────────────────────────────────
+with tab2:
+    st.subheader("Projection sur 10 ans")
+
+    df_proj = pd.DataFrame(projection["annees"])
+
+    # Tableau
+    df_affichage = df_proj.copy()
+    df_affichage.columns = [
+        "Année", "Revenus nets", "Dépenses", "NOI", "Hypothèque",
+        "Intérêts", "Capital", "Cashflow", "Cashflow cumulé",
+        "Valeur immeuble", "Solde prêt", "Équité",
+    ]
+    colonnes_dollars = df_affichage.columns[1:]
+    for col in colonnes_dollars:
+        df_affichage[col] = df_affichage[col].apply(lambda x: f"{x:,.0f}$")
+
+    st.dataframe(df_affichage, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    # Graphiques
+    g1, g2 = st.columns(2)
+
+    with g1:
+        fig_cf = go.Figure()
+        fig_cf.add_trace(
+            go.Bar(
+                x=df_proj["annee"],
+                y=df_proj["cashflow"],
+                name="Cashflow annuel",
+                marker_color=["#4ade80" if v >= 0 else "#f87171" for v in df_proj["cashflow"]],
+            )
+        )
+        fig_cf.add_trace(
+            go.Scatter(
+                x=df_proj["annee"],
+                y=df_proj["cashflow_cumule"],
+                name="Cumulé",
+                line=dict(color="#636EFA", width=3),
+            )
+        )
+        fig_cf.update_layout(
+            title="Cashflow annuel et cumulé",
+            xaxis_title="Année",
+            yaxis_title="$",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="white"),
+            height=400,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        )
+        st.plotly_chart(fig_cf, use_container_width=True)
+
+    with g2:
+        fig_val = go.Figure()
+        fig_val.add_trace(
+            go.Scatter(
+                x=df_proj["annee"],
+                y=df_proj["valeur_immeuble"],
+                name="Valeur",
+                line=dict(color="#636EFA", width=3),
+                fill="tozeroy",
+                fillcolor="rgba(99, 110, 250, 0.1)",
+            )
+        )
+        fig_val.add_trace(
+            go.Scatter(
+                x=df_proj["annee"],
+                y=df_proj["solde_pret"],
+                name="Solde prêt",
+                line=dict(color="#EE553B", width=3),
+            )
+        )
+        fig_val.add_trace(
+            go.Scatter(
+                x=df_proj["annee"],
+                y=df_proj["equite"],
+                name="Équité",
+                line=dict(color="#4ade80", width=3, dash="dash"),
+            )
+        )
+        fig_val.update_layout(
+            title="Valeur, prêt et équité",
+            xaxis_title="Année",
+            yaxis_title="$",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="white"),
+            height=400,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        )
+        st.plotly_chart(fig_val, use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 3 — LOCALISATION
+# ─────────────────────────────────────────────────────────────────────────────
+with tab3:
+    st.subheader("📍 Analyse de localisation")
+
+    region = st.selectbox("Région de l'immeuble", options=list(REGIONS.keys()))
+
+    # Afficher les pondérations
+    poids_region = REGIONS[region]
+    nom_region = region.split("(")[0].strip() if "(" in region else region
+    st.info(
+        f"📐 **Pondérations adaptées à la région {nom_region}** — "
+        "Les critères sont pondérés selon les réalités du marché local. "
+        "En milieu rural, le transport en commun est moins important que le stationnement et le potentiel de plus-value."
+    )
+
+    st.divider()
+    st.caption("Notez chaque critère de 1 (très mauvais) à 5 (excellent)")
+
+    notes = {}
+    criteres_list = list(CRITERES_LOCALISATION.items())
+
+    # Afficher en 2 colonnes
+    col_loc1, col_loc2 = st.columns(2)
+    for i, (cle, info) in enumerate(criteres_list):
+        poids_pct = round(poids_region.get(cle, 0.1) * 100)
+        col_target = col_loc1 if i < 4 else col_loc2
+        with col_target:
+            notes[cle] = st.slider(
+                f"{info['label']} (poids: {poids_pct}%)",
+                min_value=1, max_value=5, value=3,
+                help=f"{info['description']}\n\n{info['echelle']}",
+                key=f"loc_{cle}",
+            )
+
+    # Calcul du score
+    resultat_loc = calculer_score_localisation(notes, region)
+
+    st.divider()
+
+    col_score, col_radar = st.columns([1, 2])
+
+    with col_score:
+        score = resultat_loc["score"]
+        if score >= 7:
+            badge_class = "high"
+        elif score >= 5:
+            badge_class = "medium"
+        else:
+            badge_class = "low"
+
+        st.markdown(
+            f'<div style="text-align:center;">'
+            f'<p style="color:#8888a8;margin-bottom:0;">Score de localisation</p>'
+            f'<div class="score-badge {badge_class}">{score}/10</div>'
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+        st.markdown(resultat_loc["resume"])
+
+    with col_radar:
+        fig_radar = creer_graphique_radar(resultat_loc["details"], region)
+        st.plotly_chart(fig_radar, use_container_width=True)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TAB 4 — RATIOS & RECOMMANDATION
+# ─────────────────────────────────────────────────────────────────────────────
+with tab4:
+    st.subheader("🎯 Ratios financiers")
+
+    ratio_keys = [
+        ("cap_rate", "%"),
+        ("cash_on_cash", "%"),
+        ("mrb", "x"),
+        ("csd", "x"),
+        ("tri", "%"),
+        ("van", "$"),
+    ]
+
+    # Afficher en grille 2×3
+    for row_start in range(0, len(ratio_keys), 2):
+        cols = st.columns(2)
+        for j, (cle, unite) in enumerate(ratio_keys[row_start : row_start + 2]):
+            valeur = ratios.get(cle)
+            if valeur is None:
+                valeur_str = "N/A"
+                color = "#8888a8"
+            else:
+                if unite == "$":
+                    valeur_str = f"{valeur:,.0f}$"
+                elif unite == "x":
+                    valeur_str = f"{valeur:.2f}x"
+                else:
+                    valeur_str = f"{valeur:.2f}%"
+
+                # Couleur basée sur l'interprétation
+                explication = expliquer_ratio(cle, valeur)
+                interp = explication["interpretation"]
+                if "🟢" in interp:
+                    color = "#4ade80"
+                elif "🟡" in interp:
+                    color = "#facc15"
+                else:
+                    color = "#f87171"
+
+            explication = expliquer_ratio(cle, valeur if valeur is not None else 0)
+
+            with cols[j]:
+                st.markdown(
+                    f'<div class="ratio-card">'
+                    f'<div class="ratio-name">{explication["nom"]}</div>'
+                    f'<div class="ratio-value" style="color:{color};">{valeur_str}</div>'
+                    f'<div class="ratio-desc">{explication["description"]}</div>'
+                    f'<div class="ratio-interp">{explication["interpretation"]}</div>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    # Délai de récupération
+    delai = ratios.get("delai_recuperation")
+    if delai:
+        st.info(f"⏱️ **Délai de récupération de la mise de fonds** : {delai} ans")
+    else:
+        st.warning("⏱️ La mise de fonds n'est pas récupérée dans les 10 ans par le cashflow seul.")
+
+    # Recommandation
+    st.divider()
+    st.subheader("📝 Recommandation")
+    recommandation = generer_recommandation(ratios, prix_achat)
+    st.markdown(recommandation)
+
+    # Résumé des loyers si détaillé
+    if loyers_details:
+        st.divider()
+        st.subheader("🏘️ Détail des loyers")
+        df_loyers = pd.DataFrame(
+            {
+                "Logement": [f"Logement {i+1}" for i in range(len(loyers_details))],
+                "Loyer mensuel": [f"{l:,.0f}$" for l in loyers_details],
+            }
+        )
+        df_loyers.loc[len(df_loyers)] = ["**TOTAL**", f"**{loyers_total:,.0f}$**"]
+        st.dataframe(df_loyers, use_container_width=True, hide_index=True)
