@@ -23,8 +23,12 @@ def calculer_score_localisation(notes: dict, region: str) -> dict:
     details = []
     score_pondere = 0.0
 
+    # Base par défaut (manuel) OU notes automatiques fournies
+    if not notes:
+        notes = {k: 3 for k in CRITERES_LOCALISATION.keys()}
+
     for cle, info in CRITERES_LOCALISATION.items():
-        note = notes.get(cle, 3)  # défaut 3 si non fourni
+        note = notes.get(cle, 3)
         ponderation = poids.get(cle, 0.1)
         contribution = note * ponderation
         score_pondere += contribution
@@ -59,9 +63,9 @@ def calculer_score_localisation(notes: dict, region: str) -> dict:
     points_faibles = [d["label"] for d in details_tries if d["note"] <= 2][:3]
 
     if points_forts:
-        resume += f"\n\n**Points forts** : {', '.join(points_forts)}."
+        resume += f"\n\n🟢 **Points forts** : {', '.join(points_forts)}."
     if points_faibles:
-        resume += f"\n\n**Points à améliorer** : {', '.join(points_faibles)}."
+        resume += f"\n\n🔴 **Points à améliorer** : {', '.join(points_faibles)}."
 
     return {
         "score": score_final,

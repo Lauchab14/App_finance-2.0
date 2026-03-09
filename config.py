@@ -18,6 +18,7 @@ INFLATION_DEPENSES_DEFAUT = 2.0    # %
 CROISSANCE_LOYERS_DEFAUT = 3.0     # %
 APPRECIATION_DEFAUT = 3.0          # %
 TAUX_ACTUALISATION_DEFAUT = 8.0    # % pour calcul VAN
+TAUX_MARGINAL_IMPOT_DEFAUT = 40.0  # % (impôt combiné fédéral/provincial par défaut)
 
 # =============================================================================
 # TAXE SCOLAIRE — TAUX PROVINCIAL UNIQUE (2024-2025)
@@ -25,8 +26,9 @@ TAUX_ACTUALISATION_DEFAUT = 8.0    # % pour calcul VAN
 TAUX_SCOLAIRE = 0.1054  # par 100$ d'évaluation → 0.001054 en décimal
 
 # =============================================================================
-# TAUX DE TAXATION MUNICIPALE PAR VILLE (par 100$ d'évaluation)
+# TAUX DE TAXATION MUNICIPALE PAR VILLE OU MOT CLÉ (par 100$ d'évaluation)
 # =============================================================================
+# Sera utilisé pour rechercher partiellement la ville (ex: "Québec" dans "Ville de Québec")
 TAUX_MUNICIPAUX = {
     "Montréal": 0.8687,
     "Québec": 0.7924,
@@ -76,6 +78,16 @@ BAREME_MUTATION_MONTREAL = [
 FRAIS_NOTAIRE_DEFAUT = 1_500
 FRAIS_INSPECTION_DEFAUT = 600
 FRAIS_EVALUATION_DEFAUT = 400
+
+# =============================================================================
+# ESTIMATIONS DE DÉPENSES PAR DÉFAUT (V2.1)
+# =============================================================================
+# Facteurs pour estimer automatiquement les dépenses si l'utilisateur ne les connaît pas
+ESTIMATION_ASSURANCE_PCT = 0.005      # 0.5% du prix d'achat
+ESTIMATION_ENTRETIEN_PCT = 0.01       # 1% du prix d'achat
+ESTIMATION_TONTE = 600                # Base
+ESTIMATION_DENEIGEMENT = 1000         # Base
+ESTIMATION_ELECTRICITE = 0            # Souvent à la charge des locataires
 
 # =============================================================================
 # RÉGIONS ET PONDÉRATIONS DE LOCALISATION

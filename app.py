@@ -15,12 +15,19 @@ from config import (
     CROISSANCE_LOYERS_DEFAUT,
     APPRECIATION_DEFAUT,
     TAUX_ACTUALISATION_DEFAUT,
+    TAUX_MARGINAL_IMPOT_DEFAUT,
     TAUX_MUNICIPAUX,
     FRAIS_NOTAIRE_DEFAUT,
     FRAIS_INSPECTION_DEFAUT,
     FRAIS_EVALUATION_DEFAUT,
+    ESTIMATION_ASSURANCE_PCT,
+    ESTIMATION_ENTRETIEN_PCT,
+    ESTIMATION_TONTE,
+    ESTIMATION_DENEIGEMENT,
+    ESTIMATION_ELECTRICITE,
     REGIONS,
     CRITERES_LOCALISATION,
+    TAUX_SCOLAIRE,
 )
 from finance import (
     analyser_annee1,
@@ -28,8 +35,11 @@ from finance import (
     calculer_ratios,
     expliquer_ratio,
     generer_recommandation,
+    calculer_taxes_municipales,
+    calculer_taxes_scolaires,
 )
 from location import calculer_score_localisation, creer_graphique_radar
+from geocoding import rechercher_adresses, determiner_region_gps, analyser_environs_overpass
 
 # =============================================================================
 # CONFIGURATION DE LA PAGE
@@ -107,6 +117,7 @@ st.markdown(
         padding: 0.5rem 0.7rem;
         border-radius: 8px;
         background: rgba(0,0,0,0.2);
+        color: #d0d0e8; /* Fixed CSS for better readability on dark background */
     }
 
     /* Score localisation */
@@ -215,6 +226,21 @@ with st.sidebar:
         "Taux d'actualisation – VAN (%)", min_value=1.0, max_value=20.0,
         value=TAUX_ACTUALISATION_DEFAUT, step=0.5, format="%.1f",
     )
+    taux_marginal_impot = st.number_input(
+        "Taux marginal d'imposition (%)", min_value=0.0, max_value=60.0,
+        value=TAUX_MARGINAL_IMPOT_DEFAUT, step=1.0, format="%.1f",
+        help="Sert à calculer l'impact de l'impôt sur le rendement. Dépend de vos revenus globaux."
+    )
+
+# =============================================================================
+# VARIABLES D'ÉTAT SESSIONS (Geocoding)
+# =============================================================================
+if "sugg_adresses" not in st.session_state:
+    st.session_state.sugg_adresses = []
+if "adresse_choisie" not in st.session_state:
+    st.session_state.adresse_choisie = None
+if "notes_auto" not in st.session_state:
+    st.session_state.notes_auto = None
 
 # =============================================================================
 # SECTION 1 — INFORMATIONS DE L'IMMEUBLE
@@ -223,16 +249,51 @@ st.header("📋 Informations de l'immeuble")
 
 col1, col2 = st.columns(2)
 with col1:
-    adresse = st.text_input("Adresse de l'immeuble", placeholder="123 rue Exemple, Québec")
-    ville = st.selectbox("Ville", options=list(TAUX_MUNICIPAUX.keys()))
+    recherche_adr = st.text_input("Rechercher une adresse au Québec", placeholder="123 rue Exemple, Québec")
+    if recherche_adr and len(recherche_adr) > 4:
+        st.session_state.sugg_adresses = rechercher_adresses(recherche_adr)
+    
+    if st.session_state.sugg_adresses:
+        options = ["-- Sélectionner --"] + [s["display_name"] for s in st.session_state.sugg_adresses]
+        choix = st.selectbox("Suggestions d'adresses", options)
+        
+        if choix != "-- Sélectionner --":
+            # Trouver l'adresse choisie
+            for s in st.session_state.sugg_adresses:
+                if s["display_name"] == choix:
+                    st.session_state.adresse_choisie = s
+                    break
 
-    if ville == "Autre (entrer manuellement)":
+    adresse = ""
+    ville = "Montréal" # par défaut
+    region_auto = None
+    
+    if st.session_state.adresse_choisie:
+        adresse = st.session_state.adresse_choisie["display_name"]
+        ville = st.session_state.adresse_choisie.get("ville", "Montréal")
+        lat = st.session_state.adresse_choisie["lat"]
+        lon = st.session_state.adresse_choisie["lon"]
+        region_auto = determiner_region_gps(lat, lon, ville)
+        st.success(f"📍 Localisée à {ville} ({region_auto.split('(')[0].strip()})")
+
+    st.text_input("Adresse confirmée", value=adresse, disabled=True)
+
+    # Assigner la ville pour la taxation
+    ville_taxe = "Autre (entrer manuellement)"
+    for v in TAUX_MUNICIPAUX.keys():
+        if v.lower() in ville.lower():
+            ville_taxe = v
+            break
+            
+    ville_sel = st.selectbox("Ville pour taxation", options=list(TAUX_MUNICIPAUX.keys()), index=list(TAUX_MUNICIPAUX.keys()).index(ville_taxe))
+
+    if ville_sel == "Autre (entrer manuellement)":
         taux_municipal = st.number_input(
             "Taux de taxation municipal (par 100$)", min_value=0.0,
             max_value=3.0, value=0.80, step=0.01, format="%.4f",
         )
     else:
-        taux_municipal = TAUX_MUNICIPAUX[ville]
+        taux_municipal = TAUX_MUNICIPAUX[ville_sel]
         st.info(f"Taux municipal : **{taux_municipal:.4f}$ / 100$**")
 
 with col2:
@@ -248,50 +309,101 @@ with col2:
 
 # --- LOYERS : Total ou Détaillé ---
 st.subheader("💰 Revenus de loyers")
-mode_loyer = st.radio(
-    "Mode de saisie des loyers",
-    options=["Total mensuel", "Détaillé par logement"],
-    horizontal=True,
-)
-
-if mode_loyer == "Total mensuel":
-    loyers_total = st.number_input(
-        "Loyer mensuel total ($)", min_value=0, value=3_600, step=100, format="%d",
+col_l1, col_l2 = st.columns(2)
+with col_l1:
+    mode_loyer = st.radio(
+        "Mode de saisie des loyers",
+        options=["Total", "Détaillé par logement"],
+        horizontal=True,
     )
+with col_l2:
+    frequence_loyer = st.radio(
+        "Fréquence des montants",
+        options=["Mensuel", "Annuel"],
+        horizontal=True,
+    )
+
+mult_freq = 1 if frequence_loyer == "Mensuel" else (1/12)
+
+if mode_loyer == "Total":
+    label_total = "Loyer total annuel ($)" if frequence_loyer == "Annuel" else "Loyer total mensuel ($)"
+    loyers_saisis = st.number_input(
+        label_total, min_value=0, value=3_600 if frequence_loyer == "Mensuel" else 43_200, step=100, format="%d",
+    )
+    loyers_mensuels_total = loyers_saisis * mult_freq
     loyers_details = None
 else:
-    st.caption("Entrez le loyer mensuel de chaque logement :")
+    label_det = "annuel" if frequence_loyer == "Annuel" else "mensuel"
+    st.caption(f"Entrez le loyer {label_det} de chaque logement :")
     cols = st.columns(min(nb_logements, 4))
     loyers_details = []
     for i in range(nb_logements):
         with cols[i % len(cols)]:
             loyer_i = st.number_input(
-                f"Logement {i + 1} ($)", min_value=0, value=900, step=50,
+                f"Logement {i + 1} ($)", min_value=0, value=900 if frequence_loyer == "Mensuel" else 10_800, step=50,
                 format="%d", key=f"loyer_{i}",
             )
             loyers_details.append(loyer_i)
-    loyers_total = sum(loyers_details)
-    st.success(f"**Total mensuel : {loyers_total:,.0f}$**")
+    loyers_mensuels_total = sum(loyers_details) * mult_freq
+    st.success(f"**Total estimé mensuel : {loyers_mensuels_total:,.0f}$**")
 
 # =============================================================================
-# SECTION 2 — DÉPENSES
+# SECTION 2 — TAXES (Saisie Manuelle ou Automatique)
 # =============================================================================
-st.header("📊 Dépenses annuelles")
-col_d1, col_d2, col_d3, col_d4 = st.columns(4)
+st.header("🏛️ Taxes (annuelles)")
+taxes_mode = st.radio("Mode de saisie des taxes", ["Automatique (selon évaluation)", "Saisie manuelle"], horizontal=True)
 
+taxes_muni_auto = calculer_taxes_municipales(evaluation_municipale, taux_municipal)
+taxes_scol_auto = calculer_taxes_scolaires(evaluation_municipale)
+
+col_t1, col_t2 = st.columns(2)
+with col_t1:
+    taxes_municipales_man = st.number_input(
+        "Taxes municipales ($)", min_value=0.0, value=float(taxes_muni_auto),
+        step=100.0, format="%.2f", disabled=(taxes_mode == "Automatique (selon évaluation)")
+    )
+with col_t2:
+    taxes_scolaires_man = st.number_input(
+        "Taxes scolaires ($)", min_value=0.0, value=float(taxes_scol_auto),
+        step=50.0, format="%.2f", disabled=(taxes_mode == "Automatique (selon évaluation)")
+    )
+
+if taxes_mode == "Automatique (selon évaluation)":
+    taxes_municipales_finales = taxes_muni_auto
+    taxes_scolaires_finales = taxes_scol_auto
+else:
+    taxes_municipales_finales = taxes_municipales_man
+    taxes_scolaires_finales = taxes_scolaires_man
+
+# =============================================================================
+# SECTION 3 — DÉPENSES
+# =============================================================================
+st.header("📊 Dépenses annuelles (opérationnelles)")
+
+# Estimations par défaut basées sur le prix
+est_ass = max(1000, int(prix_achat * ESTIMATION_ASSURANCE_PCT))
+est_ent_autre = max(1000, int(prix_achat * ESTIMATION_ENTRETIEN_PCT))
+est_tonte = ESTIMATION_TONTE
+est_deneige = ESTIMATION_DENEIGEMENT
+est_elec = ESTIMATION_ELECTRICITE
+
+col_d1, col_d2, col_d3 = st.columns(3)
 with col_d1:
-    assurance = st.number_input("Assurance ($)", min_value=0, value=2_500, step=100, format="%d")
+    assurance = st.number_input("Assurance ($)", min_value=0, value=est_ass, step=100, format="%d")
+    electricite = st.number_input("Électricité ($)", min_value=0, value=est_elec, step=100, format="%d", help="Chauffage, communs. Souvent 0 si payé par locataires.")
 with col_d2:
-    entretien = st.number_input("Entretien ($)", min_value=0, value=3_000, step=100, format="%d")
+    tonte = st.number_input("Tonte de pelouse ($)", min_value=0, value=est_tonte, step=50, format="%d")
+    deneigement = st.number_input("Déneigement ($)", min_value=0, value=est_deneige, step=50, format="%d")
 with col_d3:
-    gestion = st.number_input("Gestion ($)", min_value=0, value=0, step=100, format="%d")
-with col_d4:
-    autres_depenses = st.number_input("Autres ($)", min_value=0, value=500, step=100, format="%d")
+    entretien_autre = st.number_input("Autre entretien/réparations ($)", min_value=0, value=est_ent_autre, step=100, format="%d")
+    gestion = st.number_input("Frais de gestion ($)", min_value=0, value=0, step=100, format="%d")
+
+autres_depenses = st.number_input("Autres dépenses (ex: permis, concierge) ($)", min_value=0, value=200, step=100, format="%d")
 
 # =============================================================================
-# SECTION 3 — FRAIS D'ACQUISITION
+# SECTION 4 — FRAIS D'ACQUISITION
 # =============================================================================
-st.header("🏷️ Frais d'acquisition (année 1)")
+st.header("🏷️ Frais d'acquisition (année 1 non récurrents)")
 col_f1, col_f2, col_f3 = st.columns(3)
 
 with col_f1:
@@ -314,11 +426,14 @@ resultats = analyser_annee1(
     prix_achat=prix_achat,
     evaluation_municipale=evaluation_municipale,
     taux_municipal_par_100=taux_municipal,
-    ville=ville,
-    loyers_mensuels_total=loyers_total,
+    ville=ville_sel,
+    loyers_mensuels_total=loyers_mensuels_total,
     taux_vacance=taux_vacance,
     assurance=assurance,
-    entretien=entretien,
+    entretien_autre=entretien_autre,
+    tonte=tonte,
+    deneigement=deneigement,
+    electricite=electricite,
     gestion=gestion,
     autres_depenses=autres_depenses,
     taux_interet=taux_interet,
@@ -328,6 +443,14 @@ resultats = analyser_annee1(
     frais_inspection=frais_inspection,
     frais_evaluation=frais_evaluation,
 )
+
+# Remplacement des taxes auto par les taxes finales (auto ou manuel)
+resultats["taxes_municipales"] = taxes_municipales_finales
+resultats["taxes_scolaires"] = taxes_scolaires_finales
+resultats["depenses_totales"] = (taxes_municipales_finales + taxes_scolaires_finales + assurance + entretien_autre + tonte + deneigement + electricite + gestion + autres_depenses)
+resultats["rne"] = resultats["revenus_nets"] - resultats["depenses_totales"]
+resultats["cashflow_avant_frais"] = resultats["rne"] - resultats["paiement_annuel"]
+resultats["cashflow_net_annee1"] = resultats["cashflow_avant_frais"] - resultats["frais_acquisition"]
 
 projection = projeter_10_ans(
     prix_achat=prix_achat,
@@ -341,13 +464,14 @@ projection = projeter_10_ans(
     croissance_loyers=croissance_loyers,
     inflation_depenses=inflation_depenses,
     appreciation=appreciation,
+    taux_marginal_impot=taux_marginal_impot,
 )
 
 mise_de_fonds_totale = resultats["mise_de_fonds"] + resultats["frais_acquisition"]
 ratios = calculer_ratios(
     prix_achat=prix_achat,
-    noi=resultats["noi"],
-    cashflow_annee1=resultats["cashflow_avant_frais"],
+    rne=resultats["rne"],
+    cashflow_annee1=resultats["cashflow_avant_frais"],  # Cashflow opérationnel pour le Cash-on-cash
     mise_de_fonds_totale=mise_de_fonds_totale,
     revenus_bruts=resultats["revenus_bruts_annuels"],
     paiement_annuel=resultats["paiement_annuel"],
@@ -391,38 +515,58 @@ with tab1:
 
     st.divider()
 
-    col_rev, col_dep = st.columns(2)
+    col_rev, col_dep, col_non_rec = st.columns(3)
 
     with col_rev:
-        st.subheader("Revenus")
-        st.write(f"- Loyers bruts annuels : **{resultats['revenus_bruts_annuels']:,.0f}$**")
+        st.subheader("🟩 Revenus")
+        st.write(f"Loyers bruts marginaux : **{resultats['revenus_bruts_annuels']:,.0f}$**")
         st.write(f"- Vacance ({taux_vacance:.1f}%) : **-{resultats['revenus_bruts_annuels'] - resultats['revenus_nets']:,.0f}$**")
-        st.write(f"- **Revenus nets : {resultats['revenus_nets']:,.0f}$**")
+        st.divider()
+        st.write(f"**Revenus nets : {resultats['revenus_nets']:,.0f}$**")
 
     with col_dep:
-        st.subheader("Dépenses")
-        st.write(f"- Taxes municipales : **{resultats['taxes_municipales']:,.0f}$**")
-        st.write(f"- Taxes scolaires : **{resultats['taxes_scolaires']:,.0f}$**")
-        st.write(f"- Assurance : **{assurance:,.0f}$**")
-        st.write(f"- Entretien : **{entretien:,.0f}$**")
+        st.subheader("🟥 Dépenses annuelles")
+        st.write(f"Taxes municipales : **{resultats['taxes_municipales']:,.0f}$**")
+        st.write(f"Taxes scolaires : **{resultats['taxes_scolaires']:,.0f}$**")
+        st.write(f"Assurance : **{assurance:,.0f}$**")
+        if electricite > 0:
+            st.write(f"Électricité : **{electricite:,.0f}$**")
+        st.write(f"Tonte : **{tonte:,.0f}$**")
+        st.write(f"Déneigement : **{deneigement:,.0f}$**")
+        st.write(f"Entretien/Réparations : **{entretien_autre:,.0f}$**")
         if gestion > 0:
-            st.write(f"- Gestion : **{gestion:,.0f}$**")
+            st.write(f"Gestion : **{gestion:,.0f}$**")
         if autres_depenses > 0:
-            st.write(f"- Autres : **{autres_depenses:,.0f}$**")
-        st.write(f"- **Total dépenses : {resultats['depenses_totales']:,.0f}$**")
+            st.write(f"Autres : **{autres_depenses:,.0f}$**")
+        st.divider()
+        st.write(f"**Total dépenses OPEX : {resultats['depenses_totales']:,.0f}$**")
+
+    with col_non_rec:
+        st.subheader("🟧 Frais Non-Récurrents")
+        st.write(f"Droits mutation : **{resultats['droits_mutation']:,.0f}$**")
+        st.write(f"Notaire : **{frais_notaire:,.0f}$**")
+        st.write(f"Inspection : **{frais_inspection:,.0f}$**")
+        st.write(f"Évaluation : **{frais_evaluation:,.0f}$**")
+        st.divider()
+        st.write(f"**Total Acquisition : {resultats['frais_acquisition']:,.0f}$**")
 
     # Graphique donut des dépenses
     st.divider()
     st.subheader("Répartition des dépenses annuelles")
 
-    dep_labels = ["Taxes municipales", "Taxes scolaires", "Assurance", "Entretien", "Hypothèque (intérêts)"]
+    dep_labels = ["Taxes munic.", "Taxes scol.", "Assurance", "Tonte", "Déneigement", "Entretien", "Hypothèque (intérêts)"]
     dep_values = [
         resultats["taxes_municipales"],
         resultats["taxes_scolaires"],
         assurance,
-        entretien,
+        tonte,
+        deneigement,
+        entretien_autre,
         resultats["interet_annee1"],
     ]
+    if electricite > 0:
+        dep_labels.append("Électricité")
+        dep_values.append(electricite)
     if gestion > 0:
         dep_labels.append("Gestion")
         dep_values.append(gestion)
@@ -476,18 +620,34 @@ with tab2:
 
     df_proj = pd.DataFrame(projection["annees"])
 
-    # Tableau
+    # Tableau avec style Streamlit (background color rendering is clearer)
     df_affichage = df_proj.copy()
     df_affichage.columns = [
-        "Année", "Revenus nets", "Dépenses", "NOI", "Hypothèque",
-        "Intérêts", "Capital", "Cashflow", "Cashflow cumulé",
+        "Année", "Revenus nets", "Dépenses", "RNE", "Frais Non Rec.", "Hypothèque",
+        "Intérêts", "Capital", "Cashflow Av. Impôt", "Rev. Imposable", "Impôt", "Cashflow Net", "Cashflow cumulé",
         "Valeur immeuble", "Solde prêt", "Équité",
     ]
     colonnes_dollars = df_affichage.columns[1:]
     for col in colonnes_dollars:
-        df_affichage[col] = df_affichage[col].apply(lambda x: f"{x:,.0f}$")
+        df_affichage[col] = df_affichage[col].apply(lambda x: f"{x:,.0f} $")
 
-    st.dataframe(df_affichage, use_container_width=True, hide_index=True)
+    def color_cashflow(val):
+        """Couleur pour le texte des colonnes Cashflow"""
+        if isinstance(val, str) and "$" in val:
+            clean_val = val.replace(" ", "").replace("$", "").replace(",", "")
+            try:
+                numeric_val = float(clean_val)
+                if numeric_val > 0:
+                    return 'color: #4ade80' # Vert
+                elif numeric_val < 0:
+                    return 'color: #f87171' # Rouge
+            except:
+                pass
+        return ''
+
+    styled_df = df_affichage.style.applymap(color_cashflow, subset=['Cashflow Av. Impôt', 'Cashflow Net'])
+
+    st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
@@ -499,9 +659,9 @@ with tab2:
         fig_cf.add_trace(
             go.Bar(
                 x=df_proj["annee"],
-                y=df_proj["cashflow"],
-                name="Cashflow annuel",
-                marker_color=["#4ade80" if v >= 0 else "#f87171" for v in df_proj["cashflow"]],
+                y=df_proj["cashflow_apres_impot"],
+                name="Cashflow annuel net (après impôt)",
+                marker_color=["#4ade80" if v >= 0 else "#f87171" for v in df_proj["cashflow_apres_impot"]],
             )
         )
         fig_cf.add_trace(
@@ -570,7 +730,19 @@ with tab2:
 with tab3:
     st.subheader("📍 Analyse de localisation")
 
-    region = st.selectbox("Région de l'immeuble", options=list(REGIONS.keys()))
+    c1, c2 = st.columns([2, 1])
+    with c1:
+        if "adresse_choisie" in st.session_state and st.session_state.adresse_choisie:
+            _lat = st.session_state.adresse_choisie["lat"]
+            _lon = st.session_state.adresse_choisie["lon"]
+            if st.button("🚀 Analyser automatiquement les environs avec OpenStreetMap"):
+                with st.spinner("Recherche des points d'intérêts dans le secteur..."):
+                    notes = analyser_environs_overpass(_lat, _lon)
+                    st.session_state.notes_auto = notes
+                    st.success("Analyse terminée ! Les notes ont été pré-remplies.")
+
+    region_idx = list(REGIONS.keys()).index(region_auto) if region_auto else 0
+    region = st.selectbox("Région de l'immeuble", options=list(REGIONS.keys()), index=region_idx)
 
     # Afficher les pondérations
     poids_region = REGIONS[region]
@@ -582,9 +754,9 @@ with tab3:
     )
 
     st.divider()
-    st.caption("Notez chaque critère de 1 (très mauvais) à 5 (excellent)")
+    st.caption("Notez chaque critère de 1 (très mauvais) à 5 (excellent). L'analyse automatique remplit ces notes à titre suggéré, mais vous pouvez les ajuster.")
 
-    notes = {}
+    notes_finales = {}
     criteres_list = list(CRITERES_LOCALISATION.items())
 
     # Afficher en 2 colonnes
@@ -593,15 +765,17 @@ with tab3:
         poids_pct = round(poids_region.get(cle, 0.1) * 100)
         col_target = col_loc1 if i < 4 else col_loc2
         with col_target:
-            notes[cle] = st.slider(
+            # Valeur par défaut 3, ou valeur de l'analyse automatique si existante
+            default_val = st.session_state.notes_auto.get(cle, 3) if st.session_state.notes_auto else 3
+            notes_finales[cle] = st.slider(
                 f"{info['label']} (poids: {poids_pct}%)",
-                min_value=1, max_value=5, value=3,
+                min_value=1, max_value=5, value=default_val,
                 help=f"{info['description']}\n\n{info['echelle']}",
                 key=f"loc_{cle}",
             )
 
     # Calcul du score
-    resultat_loc = calculer_score_localisation(notes, region)
+    resultat_loc = calculer_score_localisation(notes_finales, region)
 
     st.divider()
 
@@ -700,11 +874,15 @@ with tab4:
     if loyers_details:
         st.divider()
         st.subheader("🏘️ Détail des loyers")
+        
+        freq_label = "Loyer mensuel" if frequence_loyer == "Mensuel" else "Loyer annuel"
+        _total = loyers_mensuels_total if frequence_loyer == "Mensuel" else (loyers_mensuels_total * 12)
+
         df_loyers = pd.DataFrame(
             {
                 "Logement": [f"Logement {i+1}" for i in range(len(loyers_details))],
-                "Loyer mensuel": [f"{l:,.0f}$" for l in loyers_details],
+                freq_label: [f"{l:,.0f}$" for l in loyers_details],
             }
         )
-        df_loyers.loc[len(df_loyers)] = ["**TOTAL**", f"**{loyers_total:,.0f}$**"]
+        df_loyers.loc[len(df_loyers)] = ["**TOTAL**", f"**{_total:,.0f}$**"]
         st.dataframe(df_loyers, use_container_width=True, hide_index=True)

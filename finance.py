@@ -66,7 +66,10 @@ def analyser_annee1(
     loyers_mensuels_total: float,
     taux_vacance: float,
     assurance: float,
-    entretien: float,
+    entretien_autre: float,
+    tonte: float,
+    deneigement: float,
+    electricite: float,
     gestion: float,
     autres_depenses: float,
     taux_interet: float,
@@ -100,18 +103,20 @@ def analyser_annee1(
 
     # --- Dépenses ---
     depenses_totales = (
-        taxes_municipales + taxes_scolaires + assurance + entretien + gestion + autres_depenses
+        taxes_municipales + taxes_scolaires + assurance + 
+        entretien_autre + tonte + deneigement + electricite + 
+        gestion + autres_depenses
     )
 
-    # --- NOI (Net Operating Income) ---
-    noi = revenus_nets - depenses_totales
+    # --- RNE (Revenu Net d'Exploitation) ---
+    rne = revenus_nets - depenses_totales
 
     # --- Frais non récurrents ---
     droits_mutation = calculer_droits_mutation(prix_achat, ville)
     frais_acquisition = droits_mutation + frais_notaire + frais_inspection + frais_evaluation
 
     # --- Cashflow ---
-    cashflow_avant_frais = noi - paiement_annuel
+    cashflow_avant_frais = rne - paiement_annuel
     cashflow_net_annee1 = cashflow_avant_frais - frais_acquisition
 
     # --- Intérêts vs capital année 1 ---
@@ -136,7 +141,7 @@ def analyser_annee1(
         "taxes_municipales": taxes_municipales,
         "taxes_scolaires": taxes_scolaires,
         "depenses_totales": depenses_totales,
-        "noi": noi,
+        "rne": rne,
         "droits_mutation": droits_mutation,
         "frais_acquisition": frais_acquisition,
         "cashflow_avant_frais": cashflow_avant_frais,
@@ -144,7 +149,10 @@ def analyser_annee1(
         "interet_annee1": interet_annee1,
         "capital_annee1": capital_annee1,
         "assurance": assurance,
-        "entretien": entretien,
+        "entretien_autre": entretien_autre,
+        "tonte": tonte,
+        "deneigement": deneigement,
+        "electricite": electricite,
         "gestion": gestion,
         "autres_depenses": autres_depenses,
     }
@@ -165,6 +173,7 @@ def projeter_10_ans(
     croissance_loyers: float,
     inflation_depenses: float,
     appreciation: float,
+    taux_marginal_impot: float,
 ) -> dict:
     """Projette les résultats sur 10 ans."""
 
@@ -185,7 +194,7 @@ def projeter_10_ans(
             revenus *= 1 + croissance_loyers / 100
             depenses *= 1 + inflation_depenses / 100
 
-        noi = revenus - depenses
+        rne = revenus - depenses
 
         # Amortissement du prêt cette année
         interet_annuel = 0.0
@@ -197,11 +206,22 @@ def projeter_10_ans(
             capital_annuel += capital_mois
             solde_pret -= capital_mois
 
-        cashflow = noi - paiement_annuel
-        if annee == 1:
-            cashflow -= frais_acquisition
+        cashflow_avant = rne - paiement_annuel
+        
+        # --- Impôt et non récurrents ---
+        frais_non_recurrents_annee = frais_acquisition if annee == 1 else 0.0
+        cashflow_net_avant_impot = cashflow_avant - frais_non_recurrents_annee
 
-        cashflow_cumule += cashflow
+        # Revenu imposable = Revenus nets - dépenses récurrentes - intérêts - frais non récurrents (année 1)
+        # Ne tient pas compte de l'amortissement comptable du bâtiment pour simplifier
+        revenu_imposable = revenus - depenses - interet_annuel - frais_non_recurrents_annee
+        impot_a_payer = max(0.0, revenu_imposable * (taux_marginal_impot / 100))
+        # Note: si revenu imposable négatif, crée une perte déductible ailleurs, on pourrait 
+        # ajouter la récupération d'impôt (remboursement) si on assume des autres revenus :
+        # impot = revenu_imposable * (taux_marginal_impot / 100)
+        
+        cashflow_net_apres_impot = cashflow_net_avant_impot - impot_a_payer
+        cashflow_cumule += cashflow_net_apres_impot
 
         valeur_immeuble *= 1 + appreciation / 100
         equite = valeur_immeuble - solde_pret
@@ -211,11 +231,15 @@ def projeter_10_ans(
                 "annee": annee,
                 "revenus_nets": round(revenus, 2),
                 "depenses": round(depenses, 2),
-                "noi": round(noi, 2),
+                "rne": round(rne, 2),
+                "frais_non_recurrents": round(frais_non_recurrents_annee, 2),
                 "paiement_hypo": round(paiement_annuel, 2),
                 "interet": round(interet_annuel, 2),
                 "capital": round(capital_annuel, 2),
-                "cashflow": round(cashflow, 2),
+                "cashflow_avant_impot": round(cashflow_net_avant_impot, 2),
+                "revenu_imposable": round(revenu_imposable, 2),
+                "impot": round(impot_a_payer, 2),
+                "cashflow_apres_impot": round(cashflow_net_apres_impot, 2),
                 "cashflow_cumule": round(cashflow_cumule, 2),
                 "valeur_immeuble": round(valeur_immeuble, 2),
                 "solde_pret": round(solde_pret, 2),
@@ -223,12 +247,12 @@ def projeter_10_ans(
             }
         )
 
-        # Pour le TRI : cashflow de l'année (+ valeur nette si dernière année)
+        # Pour le TRI : cashflow net après impôt de l'année (+ valeur nette de vente si dernière année)
         if annee < 10:
-            cashflows_irr.append(cashflow)
+            cashflows_irr.append(cashflow_net_apres_impot)
         else:
-            # Dernière année : on « vend » l'immeuble
-            cashflows_irr.append(cashflow + valeur_immeuble - solde_pret)
+            # Dernière année : inclusion de la vente (simplifiée sans impôt sur gain en capital pour le TRI de base)
+            cashflows_irr.append(cashflow_net_apres_impot + valeur_immeuble - solde_pret)
 
     return {"annees": annees, "cashflows_irr": cashflows_irr}
 
@@ -238,7 +262,7 @@ def projeter_10_ans(
 # =============================================================================
 def calculer_ratios(
     prix_achat: float,
-    noi: float,
+    rne: float,
     cashflow_annee1: float,
     mise_de_fonds_totale: float,
     revenus_bruts: float,
@@ -248,7 +272,7 @@ def calculer_ratios(
 ) -> dict:
     """Calcule les principaux ratios d'analyse."""
 
-    cap_rate = (noi / prix_achat) * 100 if prix_achat > 0 else 0.0
+    cap_rate = (rne / prix_achat) * 100 if prix_achat > 0 else 0.0
 
     cash_on_cash = (
         (cashflow_annee1 / mise_de_fonds_totale) * 100
@@ -258,7 +282,7 @@ def calculer_ratios(
 
     mrb = prix_achat / revenus_bruts if revenus_bruts > 0 else float("inf")
 
-    csd = noi / paiement_annuel if paiement_annuel > 0 else float("inf")
+    csd = rne / paiement_annuel if paiement_annuel > 0 else float("inf")
 
     try:
         tri = float(npf.irr(cashflows_irr)) * 100
@@ -315,10 +339,10 @@ def expliquer_ratio(cle_ratio: str, valeur: float) -> dict:
 
 
 # =============================================================================
-# RECOMMANDATION
+# RECOMMANDATION DÉTAILLÉE
 # =============================================================================
 def generer_recommandation(ratios: dict, prix_achat: float) -> str:
-    """Génère un paragraphe de recommandation basé sur les indicateurs."""
+    """Génère un paragraphe de recommandation détaillé basé sur les indicateurs et le marché."""
 
     tri = ratios.get("tri")
     coc = ratios.get("cash_on_cash", 0)
@@ -327,49 +351,63 @@ def generer_recommandation(ratios: dict, prix_achat: float) -> str:
 
     points_positifs = []
     points_negatifs = []
+    suggestions = []
 
-    if cap >= 6:
-        points_positifs.append(f"un bon taux de capitalisation ({cap}%)")
+    # Analyse des fondamentaux (Cap Rate)
+    if cap >= 7:
+        points_positifs.append(f"un excellent TGA/Cap Rate de {cap}% face au marché actuel")
+    elif cap >= 5:
+        points_positifs.append(f"un TGA/Cap Rate correct de {cap}%")
     elif cap < 4:
-        points_negatifs.append(f"un faible taux de capitalisation ({cap}%)")
+        points_negatifs.append(f"un faible TGA/Cap Rate de {cap}% suggérant un prix payé élevé ou des loyers sous-optimisés")
+        suggestions.append("Envisagez d'optimiser les loyers ou de réduire les dépenses récurrentes (assurances, entretien).")
 
-    if coc >= 5:
-        points_positifs.append(f"un rendement sur mise de fonds intéressant ({coc}%)")
+    # Analyse du rendement (Cash on cash)
+    if coc >= 8:
+        points_positifs.append(f"un rendement immédiat sur la mise de fonds très fort ({coc}%)")
+    elif coc >= 4:
+        points_positifs.append(f"un rendement initial raisonnable sur la mise de fonds ({coc}%)")
     elif coc < 0:
-        points_negatifs.append(f"un cashflow négatif ({coc}%)")
+        points_negatifs.append(f"un cashflow net annuel négatif (rendement de {coc}%)")
+        suggestions.append("Une mise de fonds plus élevée ou un amortissement plus long (ex: APH Select) est recommandé pour dégager du cashflow positif.")
 
-    if csd >= 1.2:
-        points_positifs.append(f"une bonne couverture de dette ({csd}x)")
-    elif csd < 1.0:
-        points_negatifs.append(f"une couverture de dette insuffisante ({csd}x)")
+    # Analyse de sécurité (CSD)
+    if csd >= 1.25:
+        points_positifs.append(f"une couverture de dette forte ({csd}x), sécurisant l'approbation bancaire")
+    elif csd < 1.15:
+        points_negatifs.append(f"une couverture de dette très serrée ({csd}x) qui pourrait être refusée par la banque")
+        suggestions.append("Renégociez le prix d'achat à la baisse ou augmentez la mise de fonds.")
 
-    if tri is not None and tri >= 10:
-        points_positifs.append(f"un TRI attractif ({tri}%)")
-    elif tri is not None and tri < 5:
-        points_negatifs.append(f"un TRI faible ({tri}%)")
+    # Analyse long terme (TRI) - TRI maintenant après impôts
+    if tri is not None and tri >= 8:
+        points_positifs.append(f"un TRI après impôts attractif sur 10 ans ({tri}%)")
+    elif tri is not None and tri < 4:
+        points_negatifs.append(f"un rendement global après impôts très modeste ({tri}%), risqué si le marché stagne")
 
+    # Synthèse du verdict
     if len(points_positifs) >= 3 and len(points_negatifs) == 0:
-        verdict = "🟢 **Bon investissement !**"
+        verdict = "🟢 **Excellent profil d'investissement**"
         detail = (
-            f"Cet immeuble présente {', '.join(points_positifs)}. "
-            f"L'investissement semble solide et devrait générer un rendement satisfaisant."
+            f"Cet immeuble présente des fondamentaux solides, notamment {', '.join(points_positifs)}. "
+            f"La structure de financement actuelle génère de bons résultats immédiats et à long terme. C'est une acquisition très prometteuse."
         )
     elif len(points_negatifs) >= 2:
-        # Calculer un prix suggéré (réduction de ~10%)
-        prix_suggere = round(prix_achat * 0.90 / 1000) * 1000
-        verdict = "🔴 **Investissement risqué — Contre-offre recommandée**"
+        # Calculer un prix suggéré (réduction agressive)
+        prix_suggere = round(prix_achat * 0.85 / 1000) * 1000
+        verdict = "🔴 **Investissement hautement risqué — Restructuration ou baisse de prix exigée**"
         detail = (
-            f"L'immeuble présente {', '.join(points_negatifs)}. "
-            f"Nous recommandons une contre-offre aux alentours de **{prix_suggere:,.0f}$** "
-            f"pour améliorer la rentabilité."
+            f"Dans les conditions actuelles, ce projet est vulnérable en raison de {', '.join(points_negatifs)}. "
+            f"Pour ramener cet immeuble à un niveau de rentabilité acceptable, il est recommandé de présenter une contre-offre agressive autour de **{prix_suggere:,.0f}$** ou d'augmenter significativement la mise de fonds."
         )
     else:
-        verdict = "🟡 **Investissement acceptable avec réserves**"
+        verdict = "🟡 **Investissement correct avec des zones de vigilance**"
         tous_points = []
         if points_positifs:
-            tous_points.append(f"Points positifs : {', '.join(points_positifs)}")
+            tous_points.append(f"**Les forces** incluent {', '.join(points_positifs)}.")
         if points_negatifs:
-            tous_points.append(f"Points à surveiller : {', '.join(points_negatifs)}")
-        detail = ". ".join(tous_points) + "."
+            tous_points.append(f"**Les faiblesses** résident dans {', '.join(points_negatifs)}.")
+        
+        recommandation_actions = f"**Pistes d'action :** {' '.join(suggestions)}" if suggestions else ""
+        detail = " ".join(tous_points) + "\n\n" + recommandation_actions
 
     return f"{verdict}\n\n{detail}"
