@@ -175,13 +175,23 @@ def determiner_region_gps(lat: float, lon: float, ville: str) -> str:
     return "Rurale (Beauce, Bas-St-Laurent, Abitibi, etc.)"
 
 
-def obtenir_services_proximite(lat: float, lon: float, rayon: int = 3000) -> Dict[str, Optional[Dict]]:
+def _haversine(lat1, lon1, lat2, lon2):
+    """Calcule la distance en km entre deux points GPS (formule Haversine)."""
+    R = 6371  # rayon de la Terre en km
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return round(R * c, 2)
+
+
+def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str, list]:
     """
-    Trouve les coordonnées du service le plus proche pour 5 catégories clés via Overpass.
-    Recherche à la fois les noeuds (node) et les batiments (way) pour maximiser la couverture.
+    Trouve TOUS les services dans un rayon donné via Overpass, triés par distance.
+    Retourne un dictionnaire avec une liste de services par catégorie.
     """
     query = f"""
-    [out:json][timeout:15];
+    [out:json][timeout:20];
     (
       node["highway"="bus_stop"](around:{rayon},{lat},{lon});
       node["railway"="station"](around:{rayon},{lat},{lon});
@@ -199,117 +209,79 @@ def obtenir_services_proximite(lat: float, lon: float, rayon: int = 3000) -> Dic
     """
     
     services = {
-        "bus": None,
-        "ecole": None,
-        "epicerie": None,
-        "pharmacie": None,
-        "parc": None
+        "epicerie": [],
+        "ecole": [],
+        "pharmacie": [],
+        "bus": [],
+        "parc": []
     }
     
     try:
         url = "https://overpass-api.de/api/interpreter"
         data = None
         
-        # Retry jusqu'à 2 fois en cas de rate-limit ou d'erreur
         for tentative in range(2):
-            response = requests.post(url, data={"data": query}, timeout=20)
-            if response.status_code == 200 and response.headers.get('content-type', '').startswith('application/json'):
+            response = requests.post(url, data={"data": query}, timeout=25)
+            if response.status_code == 200 and 'application/json' in response.headers.get('content-type', ''):
                 data = response.json()
                 break
-            elif response.status_code == 429 or response.status_code == 504:
-                # Rate limited ou timeout, attendre et réessayer
-                time.sleep(3)
-            else:
-                # Autre erreur, on réessaie une fois
-                time.sleep(2)
+            time.sleep(3)
         
         if not data:
-            print(f"Overpass n'a pas répondu correctement après 2 tentatives (status: {response.status_code})")
+            print(f"Overpass n'a pas répondu correctement")
             return services
-        
-        # Associer chaque élement à une catégorie
-        elements_par_cat = {"bus": [], "ecole": [], "epicerie": [], "pharmacie": [], "parc": []}
         
         for el in data.get("elements", []):
             tags = el.get("tags", {})
-            # Pour les 'way', les coordonnées sont dans 'center'
             el_lat = el.get('lat') or (el.get('center', {}).get('lat'))
             el_lon = el.get('lon') or (el.get('center', {}).get('lon'))
             if not el_lat or not el_lon:
                 continue
-                
-            el_info = {"lat": el_lat, "lon": el_lon, "tags": tags}
+            
+            nom = tags.get('name', '')
+            dist_km = _haversine(lat, lon, el_lat, el_lon)
+            # Estimation du temps en voiture (~40 km/h en ville, minimum 1 min)
+            temps_min = max(1, round((dist_km / 40) * 60))
+            
+            info = {
+                "nom": nom,
+                "lat": el_lat,
+                "lon": el_lon,
+                "distance_km": dist_km,
+                "temps_min": temps_min
+            }
             
             if tags.get("highway") == "bus_stop" or tags.get("railway") == "station":
-                elements_par_cat["bus"].append(el_info)
+                info["nom"] = nom or "Arrêt de bus"
+                services["bus"].append(info)
             if tags.get("amenity") in ["school", "college", "kindergarten", "university"]:
-                elements_par_cat["ecole"].append(el_info)
+                info["nom"] = nom or "École"
+                services["ecole"].append(info)
             if tags.get("shop") in ["supermarket", "convenience", "greengrocer"]:
-                elements_par_cat["epicerie"].append(el_info)
+                info["nom"] = nom or "Épicerie"
+                services["epicerie"].append(info)
             if tags.get("amenity") == "pharmacy" or tags.get("shop") == "chemist":
-                elements_par_cat["pharmacie"].append(el_info)
+                info["nom"] = nom or "Pharmacie"
+                services["pharmacie"].append(info)
             if tags.get("leisure") in ["park", "playground", "garden"]:
-                elements_par_cat["parc"].append(el_info)
-                
-        # Trouver le plus proche pour chaque catégorie (distance géolocalisée simple)
-        def calc_dist(lat1, lon1, lat2, lon2):
-            return math.sqrt((lat1-lat2)**2 + (lon1-lon2)**2)
-            
-        for cat, liste in elements_par_cat.items():
-            if liste:
-                proche = min(liste, key=lambda x: calc_dist(lat, lon, x['lat'], x['lon']))
-                services[cat] = {"lat": proche['lat'], "lon": proche['lon'], "nom": proche.get('tags', {}).get('name', cat.capitalize())}
+                info["nom"] = nom or "Parc"
+                services["parc"].append(info)
+        
+        # Trier chaque catégorie par distance et dédupliquer par nom
+        for cat in services:
+            services[cat].sort(key=lambda x: x['distance_km'])
+            # Dédupliquer (certains lieux apparaissent en node ET way)
+            noms_vus = set()
+            dedup = []
+            for s in services[cat]:
+                cle = s['nom'].lower() if s['nom'] else f"{s['lat']:.4f}"
+                if cle not in noms_vus:
+                    noms_vus.add(cle)
+                    dedup.append(s)
+            services[cat] = dedup
 
     except Exception as e:
         print(f"Erreur d'analyse proximite Overpass: {e}")
         
     return services
 
-
-def calculer_trajets_ors(lat_origine: float, lon_origine: float, cibles: Dict[str, Optional[Dict]]) -> Dict[str, any]:
-    """
-    Utilise openrouteservice (via API key) pour calculer les temps et distances
-    vers les points d'intérêts ciblés (en voiture).
-    """
-    api_key = os.environ.get("OPENROUTESERVICE_API_KEY")
-    resultats = {}
-    
-    if not api_key:
-        print("Avertissement: OPENROUTESERVICE_API_KEY non trouvée dans le .env")
-        # Retourner des valeurs vides
-        for k in cibles.keys(): resultats[k] = None
-        return resultats
-        
-    try:
-        client = openrouteservice.Client(key=api_key)
-        
-        for k, cible in cibles.items():
-            if cible and cible['lat'] and cible['lon']:
-                coords = [[lon_origine, lat_origine], [cible['lon'], cible['lat']]]
-                try:
-                    # Trajet en voiture par défaut
-                    route = client.directions(
-                        coordinates=coords,
-                        profile='driving-car',
-                        format='json'
-                    )
-                    
-                    if route and 'routes' in route and len(route['routes']) > 0:
-                        summary = route['routes'][0]['summary']
-                        resultats[k] = {
-                            "distance_km": round(summary['distance'] / 1000, 1),
-                            "temps_min": max(1, round(summary['duration'] / 60))
-                        }
-                    else:
-                        resultats[k] = None
-                except Exception as inner_e:
-                    print(f"Erreur de route pour {k}: {inner_e}")
-                    resultats[k] = None
-            else:
-                 resultats[k] = None
-                 
-    except Exception as e:
-        print(f"Erreur Client OpenRouteService: {e}")
-        for k in cibles.keys(): resultats[k] = None
-        
-    return resultats

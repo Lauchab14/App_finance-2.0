@@ -39,7 +39,7 @@ from finance import (
     calculer_taxes_scolaires,
 )
 from location import calculer_score_localisation_avance
-from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_services_proximite, calculer_trajets_ors
+from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_tous_services
 from demographie import analyser_demographie
 from dotenv import load_dotenv
 
@@ -734,111 +734,115 @@ with tab2:
 with tab3:
     st.subheader("📍 Analyse de localisation détaillée")
 
-    c1, c2 = st.columns([2, 1])
-    with c1:
-        if "adresse_choisie" in st.session_state and st.session_state.adresse_choisie:
-            _lat = st.session_state.adresse_choisie["lat"]
-            _lon = st.session_state.adresse_choisie["lon"]
-            _adresse = st.session_state.adresse_choisie.get("display_name", "")
-            _region = determiner_region_gps(_lat, _lon, "Inconnu")
-            
-            # Extract postal code from address string if possible
-            import re
-            _code_postal = ""
-            match = re.search(r'[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d', _adresse)
-            if match:
-                _code_postal = match.group(0).upper().replace(" ", "")
+    if "adresse_choisie" in st.session_state and st.session_state.adresse_choisie:
+        _lat = st.session_state.adresse_choisie["lat"]
+        _lon = st.session_state.adresse_choisie["lon"]
+        _adresse = st.session_state.adresse_choisie.get("display_name", "")
+        _region = determiner_region_gps(_lat, _lon, st.session_state.adresse_choisie.get("ville", "Inconnu"))
+        
+        st.write(f"**Coordonnées :** {_lat:.4f}, {_lon:.4f} — **Région :** {_region}")
 
-            st.write(f"**Coordonnées :** {_lat:.4f}, {_lon:.4f}")
-            if _code_postal:
-                st.write(f"**Code Postal estimé :** {_code_postal}")
+        if st.button("🚀 Lancer l'Analyse Avancée (Services & Démographie)", type="primary"):
+            with st.spinner("Analyse de l'emplacement en cours (peut prendre 10-20 secondes)..."):
+                
+                # 1. Carte interactive
+                df_map = pd.DataFrame({'lat': [_lat], 'lon': [_lon]})
+                st.map(df_map, zoom=14, use_container_width=True)
 
-            if st.button("🚀 Lancer l'Analyse Avancée (Services & Démographie)", type="primary"):
-                with st.spinner("Analyse de l'emplacement et recherche des données..."):
-                    
-                    # 1. Carte interactive
-                    df_map = pd.DataFrame({'lat': [_lat], 'lon': [_lon]})
-                    st.map(df_map, zoom=14, use_container_width=True)
+                # 2. Tous les services dans un rayon de 5 km
+                st.info("Recherche de TOUS les services à proximité (OpenStreetMap)...")
+                tous_services = obtenir_tous_services(_lat, _lon, rayon=5000)
+                
+                # 3. Démographie locale
+                st.info("Analyse démographique locale (topologie des bâtiments)...")
+                stats_demo = analyser_demographie(_lat, _lon, _region)
 
-                    # 2. Services de proximité
-                    st.info("Recherche des services à proximité (OpenStreetMap)...")
-                    cibles_services = obtenir_services_proximite(_lat, _lon, rayon=3000)
-                    
-                    # 3. Trajets et distances
-                    st.info("Calcul des temps de parcours (OpenRouteService)...")
-                    trajets = calculer_trajets_ors(_lat, _lon, cibles_services)
-                    
-                    # 4. Démographie
-                    st.info("Extraction du profil démographique (Estimation / Région)...")
-                    stats_demo = analyser_demographie(_lat, _lon, _region)
+                # 4. Score global (utilise le service le plus proche de chaque catégorie)
+                trajets_proches = {}
+                for cat, liste in tous_services.items():
+                    if liste:
+                        trajets_proches[cat] = {
+                            "distance_km": liste[0]["distance_km"],
+                            "temps_min": liste[0]["temps_min"]
+                        }
+                    else:
+                        trajets_proches[cat] = None
+                
+                resultat_score = calculer_score_localisation_avance(trajets_proches, stats_demo)
 
-                    # 5. Score global
-                    resultat_score = calculer_score_localisation_avance(trajets, stats_demo)
+                st.markdown("---")
+                
+                # --- SCORE ---
+                score_total = resultat_score['score_total']
+                if score_total >= 80: badge_class = "high"
+                elif score_total >= 60: badge_class = "medium"
+                else: badge_class = "low"
+                
+                st.markdown(
+                    f'<div style="text-align:center;">'
+                    f'<p style="color:#8888a8;margin-bottom:0;">Score d\'Attractivité Locative</p>'
+                    f'<div class="score-badge {badge_class}">{score_total}/100</div>'
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+                st.markdown(f"> {resultat_score['resume']}")
+                
+                st.divider()
+                
+                # --- DÉMOGRAPHIE ---
+                st.markdown("### 🏘️ Synthèse Démographique")
+                col_demo1, col_demo2, col_demo3, col_demo4 = st.columns(4)
+                
+                with col_demo1:
+                    val_loc = stats_demo.get('locataires_pct')
+                    st.metric("Locataires", f"{val_loc}%" if val_loc else "N/D")
+                with col_demo2:
+                    val_rev = stats_demo.get('revenu_median')
+                    st.metric("Revenu Médian", f"{val_rev:,.0f} $".replace(',', ' ') if val_rev else "N/D")
+                with col_demo3:
+                    val_croissance = stats_demo.get('croissance_pop')
+                    st.metric("Croissance", f"{val_croissance}%" if val_croissance is not None else "N/D")
+                with col_demo4:
+                    ville_a = stats_demo.get('ville_analyse')
+                    st.metric("Municipalité", ville_a if ville_a else "N/D")
+                    
+                st.caption(f"_{stats_demo.get('source', '')}_ — {stats_demo.get('nb_appartements', 0)} apparts, {stats_demo.get('nb_maisons', 0)} maisons dans 1km")
 
-                    st.markdown("---")
+                st.divider()
+                
+                # --- TOUS LES SERVICES ---
+                st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
+                
+                titres_cat = {
+                    "epicerie": "🛒 Épiceries & Supermarchés",
+                    "ecole": "🏫 Écoles & Institutions",
+                    "pharmacie": "💊 Pharmacies",
+                    "bus": "🚌 Transport en Commun",
+                    "parc": "🌳 Parcs & Loisirs"
+                }
+                
+                for cat_key, cat_titre in titres_cat.items():
+                    liste = tous_services.get(cat_key, [])
+                    nb = len(liste)
                     
-                    # --- AFFICHAGE DES RÉSULTATS ---
-                    score_total = resultat_score['score_total']
-                    
-                    if score_total >= 80: badge_class = "high"
-                    elif score_total >= 60: badge_class = "medium"
-                    else: badge_class = "low"
-                    
-                    st.markdown(
-                        f'<div style="text-align:center;">'
-                        f'<p style="color:#8888a8;margin-bottom:0;">Score d\'Attractivité Locative</p>'
-                        f'<div class="score-badge {badge_class}">{score_total}/100</div>'
-                        f"</div>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(f"> {resultat_score['resume']}")
-                    
-                    st.divider()
-                    st.markdown("### 🏘️ Synthèse Démographique & Marché")
-                    col_demo1, col_demo2, col_demo3 = st.columns(3)
-                    
-                    with col_demo1:
-                        val_loc = stats_demo.get('locataires_pct')
-                        st.metric("Proportion Locataires", f"{val_loc}%" if val_loc else "N/D")
-                    with col_demo2:
-                        val_rev = stats_demo.get('revenu_median')
-                        st.metric("Revenu Médian", f"{val_rev:,.0f} $".replace(',', ' ') if val_rev else "N/D")
-                    with col_demo3:
-                        val_croissance = stats_demo.get('croissance_pop')
-                        st.metric("Croissance Population", f"{val_croissance}%" if val_croissance is not None else "N/D")
-                        
-                    st.caption(f"Source des données locales : *{stats_demo.get('source', 'Inconnue')}*")
-
-                    st.markdown("### 🚗 Temps de Trajet aux Services (En Voiture)")
-                    
-                    df_trajets = []
-                    for service_key, titre in [("epicerie", "Épicerie"), ("ecole", "École"), ("pharmacie", "Pharmacie"), ("bus", "Arrêt d'Autobus"), ("parc", "Parc / Loisirs")]:
-                        traj = trajets.get(service_key)
-                        cible = cibles_services.get(service_key)
-                        nom_lieu = cible.get("nom", "Inconnu") if cible else "Aucun trouvé (< 1.5km)"
-                        
-                        if traj:
-                            df_trajets.append({
-                                "Service": titre,
-                                "Nom du Lieu": nom_lieu,
-                                "Distance (km)": f"{traj['distance_km']} km",
-                                "Temps estimé": f"{traj['temps_min']} min"
-                            })
+                    with st.expander(f"{cat_titre} ({nb} trouvé{'s' if nb > 1 else ''})", expanded=(nb > 0)):
+                        if liste:
+                            rows = []
+                            for s in liste:
+                                rows.append({
+                                    "Nom": s['nom'],
+                                    "Distance": f"{s['distance_km']} km",
+                                    "Temps estimé": f"~{s['temps_min']} min"
+                                })
+                            st.table(pd.DataFrame(rows))
                         else:
-                            df_trajets.append({
-                                "Service": titre,
-                                "Nom du Lieu": nom_lieu,
-                                "Distance (km)": "N/D",
-                                "Temps estimé": "N/D"
-                            })
-                            
-                    st.table(pd.DataFrame(df_trajets))
-                    
-                    with st.expander("Voir le détail des points (Score / 100)"):
-                        st.dataframe(pd.DataFrame(resultat_score['details']), use_container_width=True)
+                            st.write("Aucun trouvé dans un rayon de 5 km.")
+                
+                with st.expander("Voir le détail des points (Score / 100)"):
+                    st.dataframe(pd.DataFrame(resultat_score['details']), use_container_width=True)
 
-        else:
-            st.info("Veuillez sélectionner et confirmer une adresse dans la section 'Informations de l'immeuble' pour lancer l'analyse de localisation.")
+    else:
+        st.info("Veuillez sélectionner et confirmer une adresse dans la section 'Informations de l'immeuble' pour lancer l'analyse de localisation.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 4 — RATIOS & RECOMMANDATION
