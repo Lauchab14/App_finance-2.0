@@ -38,8 +38,12 @@ from finance import (
     calculer_taxes_municipales,
     calculer_taxes_scolaires,
 )
-from location import calculer_score_localisation, creer_graphique_radar
-from geocoding import rechercher_adresses, determiner_region_gps, analyser_environs_overpass
+from location import calculer_score_localisation_avance
+from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_services_proximite, calculer_trajets_ors
+from demographie import analyser_demographie
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # =============================================================================
 # CONFIGURATION DE LA PAGE
@@ -728,80 +732,113 @@ with tab2:
 # TAB 3 — LOCALISATION
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("📍 Analyse de localisation")
+    st.subheader("📍 Analyse de localisation détaillée")
 
     c1, c2 = st.columns([2, 1])
     with c1:
         if "adresse_choisie" in st.session_state and st.session_state.adresse_choisie:
             _lat = st.session_state.adresse_choisie["lat"]
             _lon = st.session_state.adresse_choisie["lon"]
-            if st.button("🚀 Analyser automatiquement les environs avec OpenStreetMap"):
-                with st.spinner("Recherche des points d'intérêts dans le secteur..."):
-                    notes = analyser_environs_overpass(_lat, _lon)
-                    st.session_state.notes_auto = notes
-                    st.success("Analyse terminée ! Les notes ont été pré-remplies.")
+            _adresse = st.session_state.adresse_choisie.get("display_name", "")
+            _region = determiner_region_gps(_lat, _lon, "Inconnu")
+            
+            # Extract postal code from address string if possible
+            import re
+            _code_postal = ""
+            match = re.search(r'[A-Za-z]\d[A-Za-z] ?\d[A-Za-z]\d', _adresse)
+            if match:
+                _code_postal = match.group(0).upper().replace(" ", "")
 
-    region_idx = list(REGIONS.keys()).index(region_auto) if region_auto else 0
-    region = st.selectbox("Région de l'immeuble", options=list(REGIONS.keys()), index=region_idx)
+            st.write(f"**Coordonnées :** {_lat:.4f}, {_lon:.4f}")
+            if _code_postal:
+                st.write(f"**Code Postal estimé :** {_code_postal}")
 
-    # Afficher les pondérations
-    poids_region = REGIONS[region]
-    nom_region = region.split("(")[0].strip() if "(" in region else region
-    st.info(
-        f"📐 **Pondérations adaptées à la région {nom_region}** — "
-        "Les critères sont pondérés selon les réalités du marché local. "
-        "En milieu rural, le transport en commun est moins important que le stationnement et le potentiel de plus-value."
-    )
+            if st.button("🚀 Lancer l'Analyse Avancée (Services & Démographie)", type="primary"):
+                with st.spinner("Analyse de l'emplacement et recherche des données..."):
+                    
+                    # 1. Carte interactive
+                    df_map = pd.DataFrame({'lat': [_lat], 'lon': [_lon]})
+                    st.map(df_map, zoom=14, use_container_width=True)
 
-    st.divider()
-    st.caption("Notez chaque critère de 1 (très mauvais) à 5 (excellent). L'analyse automatique remplit ces notes à titre suggéré, mais vous pouvez les ajuster.")
+                    # 2. Services de proximité
+                    st.info("Recherche des services à proximité (OpenStreetMap)...")
+                    cibles_services = obtenir_services_proximite(_lat, _lon, rayon=1500)
+                    
+                    # 3. Trajets et distances
+                    st.info("Calcul des temps de parcours (OpenRouteService)...")
+                    trajets = calculer_trajets_ors(_lat, _lon, cibles_services)
+                    
+                    # 4. Démographie
+                    st.info("Extraction du profil démographique (Estimation / Région)...")
+                    stats_demo = analyser_demographie(_lat, _lon, _region)
 
-    notes_finales = {}
-    criteres_list = list(CRITERES_LOCALISATION.items())
+                    # 5. Score global
+                    resultat_score = calculer_score_localisation_avance(trajets, stats_demo)
 
-    # Afficher en 2 colonnes
-    col_loc1, col_loc2 = st.columns(2)
-    for i, (cle, info) in enumerate(criteres_list):
-        poids_pct = round(poids_region.get(cle, 0.1) * 100)
-        col_target = col_loc1 if i < 4 else col_loc2
-        with col_target:
-            # Valeur par défaut 3, ou valeur de l'analyse automatique si existante
-            default_val = st.session_state.notes_auto.get(cle, 3) if st.session_state.notes_auto else 3
-            notes_finales[cle] = st.slider(
-                f"{info['label']} (poids: {poids_pct}%)",
-                min_value=1, max_value=5, value=default_val,
-                help=f"{info['description']}\n\n{info['echelle']}",
-                key=f"loc_{cle}",
-            )
+                    st.markdown("---")
+                    
+                    # --- AFFICHAGE DES RÉSULTATS ---
+                    score_total = resultat_score['score_total']
+                    
+                    if score_total >= 80: badge_class = "high"
+                    elif score_total >= 60: badge_class = "medium"
+                    else: badge_class = "low"
+                    
+                    st.markdown(
+                        f'<div style="text-align:center;">'
+                        f'<p style="color:#8888a8;margin-bottom:0;">Score d\'Attractivité Locative</p>'
+                        f'<div class="score-badge {badge_class}">{score_total}/100</div>'
+                        f"</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(f"> {resultat_score['resume']}")
+                    
+                    st.divider()
+                    st.markdown("### 🏘️ Synthèse Démographique & Marché")
+                    col_demo1, col_demo2, col_demo3 = st.columns(3)
+                    
+                    with col_demo1:
+                        val_loc = stats_demo.get('locataires_pct')
+                        st.metric("Proportion Locataires", f"{val_loc}%" if val_loc else "N/D")
+                    with col_demo2:
+                        val_rev = stats_demo.get('revenu_median')
+                        st.metric("Revenu Médian", f"{val_rev:,.0f} $".replace(',', ' ') if val_rev else "N/D")
+                    with col_demo3:
+                        val_croissance = stats_demo.get('croissance_pop')
+                        st.metric("Croissance Population", f"{val_croissance}%" if val_croissance is not None else "N/D")
+                        
+                    st.caption(f"Source des données locales : *{stats_demo.get('source', 'Inconnue')}*")
 
-    # Calcul du score
-    resultat_loc = calculer_score_localisation(notes_finales, region)
+                    st.markdown("### 🚗 Temps de Trajet aux Services (En Voiture)")
+                    
+                    df_trajets = []
+                    for service_key, titre in [("epicerie", "Épicerie"), ("ecole", "École"), ("pharmacie", "Pharmacie"), ("bus", "Arrêt d'Autobus"), ("parc", "Parc / Loisirs")]:
+                        traj = trajets.get(service_key)
+                        cible = cibles_services.get(service_key)
+                        nom_lieu = cible.get("nom", "Inconnu") if cible else "Aucun trouvé (< 1.5km)"
+                        
+                        if traj:
+                            df_trajets.append({
+                                "Service": titre,
+                                "Nom du Lieu": nom_lieu,
+                                "Distance (km)": f"{traj['distance_km']} km",
+                                "Temps estimé": f"{traj['temps_min']} min"
+                            })
+                        else:
+                            df_trajets.append({
+                                "Service": titre,
+                                "Nom du Lieu": nom_lieu,
+                                "Distance (km)": "N/D",
+                                "Temps estimé": "N/D"
+                            })
+                            
+                    st.table(pd.DataFrame(df_trajets))
+                    
+                    with st.expander("Voir le détail des points (Score / 100)"):
+                        st.dataframe(pd.DataFrame(resultat_score['details']), use_container_width=True)
 
-    st.divider()
-
-    col_score, col_radar = st.columns([1, 2])
-
-    with col_score:
-        score = resultat_loc["score"]
-        if score >= 7:
-            badge_class = "high"
-        elif score >= 5:
-            badge_class = "medium"
         else:
-            badge_class = "low"
-
-        st.markdown(
-            f'<div style="text-align:center;">'
-            f'<p style="color:#8888a8;margin-bottom:0;">Score de localisation</p>'
-            f'<div class="score-badge {badge_class}">{score}/10</div>'
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-        st.markdown(resultat_loc["resume"])
-
-    with col_radar:
-        fig_radar = creer_graphique_radar(resultat_loc["details"], region)
-        st.plotly_chart(fig_radar, use_container_width=True)
+            st.info("Veuillez sélectionner et confirmer une adresse dans la section 'Informations de l'immeuble' pour lancer l'analyse de localisation.")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 4 — RATIOS & RECOMMANDATION

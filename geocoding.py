@@ -5,9 +5,72 @@ import requests
 import time
 from typing import List, Dict, Optional, Tuple
 import math
+import os
+import openrouteservice
+from dotenv import load_dotenv
+
+# Charger les variables d'environnement
+load_dotenv()
 
 # Agent utilisateur obligatoire pour Nominatim (OpenStreetMap)
-USER_AGENT = "AnalyseurRentabiliteQuebec/2.1 (contact@example.com)"
+# Nominatim exige un User-Agent unique et descriptif, sinon il bloque les requêtes (403)
+USER_AGENT = "AnalyseurRentabiliteQC/2.1 (university-project; streamlit-app)"
+
+def verifier_adresse(adresse: str) -> Dict[str, str]:
+    """
+    Vérifie et géolocalise une adresse saisie via Nominatim.
+    Retourne un dictionnaire avec le statut, latitude, longitude et l'adresse formatée.
+    """
+    if not adresse or len(adresse) < 5:
+        return {"statut": "erreur", "message": "L'adresse saisie est trop courte."}
+
+    url = "https://nominatim.openstreetmap.org/search"
+    params = {
+        "q": adresse,
+        "format": "json",
+    }
+    headers = {"User-Agent": USER_AGENT}
+
+    try:
+        response = requests.get(url, params=params, headers=headers, timeout=5)
+        response.raise_for_status()
+        time.sleep(0.5)
+
+        data = response.json()
+        if not data:
+            return {
+                "statut": "erreur",
+                "message": "Adresse introuvable. Veuillez vérifier l'orthographe ou ajouter la ville et 'Québec'.",
+            }
+
+        # Prendre le premier résultat
+        meilleur_resultat = data[0]
+        adresse_formatee = meilleur_resultat.get("display_name", adresse)
+        lat = float(meilleur_resultat.get("lat"))
+        lon = float(meilleur_resultat.get("lon"))
+
+        # Identifier la région grosso modo selon le nom pour appliquer les bonnes pondérations
+        ville = "Inconnu"
+        for part in adresse_formatee.split(","):
+            if part.strip().lower() in ["montréal", "montreal", "laval", "longueuil"]:
+                ville = part.strip()
+                break
+            elif part.strip().lower() in ["québec", "quebec", "lévis", "levis"]:
+                ville = part.strip()
+                break
+
+        region = determiner_region_gps(lat, lon, ville)
+
+        return {
+            "statut": "succes",
+            "lat": lat,
+            "lon": lon,
+            "adresse": adresse_formatee,
+            "region": region,
+        }
+
+    except Exception as e:
+        return {"statut": "erreur", "message": f"Erreur de connexion API : {str(e)}"}
 
 
 def rechercher_adresses(requete: str) -> List[Dict]:
@@ -25,9 +88,9 @@ def rechercher_adresses(requete: str) -> List[Dict]:
         "addressdetails": 1,
         "countrycodes": "ca",
         "limit": 5,
-        # Restreindre approximativement au Québec via une bounding box large
-        "viewbox": "-80.0,53.0,-57.0,45.0",
-        "bounded": 1,
+        # Viewbox = west_lon, south_lat, east_lon, north_lat (priorité au Québec)
+        "viewbox": "-80.0,44.0,-57.0,63.0",
+        "bounded": 0,  # Ne pas exclure les résultats hors viewbox
     }
     headers = {"User-Agent": USER_AGENT}
 
@@ -98,128 +161,110 @@ def determiner_region_gps(lat: float, lon: float, ville: str) -> str:
     return "Rurale (Beauce, Bas-St-Laurent, Abitibi, etc.)"
 
 
-def analyser_environs_overpass(lat: float, lon: float) -> Dict[str, int]:
+def obtenir_services_proximite(lat: float, lon: float, rayon: int = 1500) -> Dict[str, Optional[Dict]]:
     """
-    Utilise l'API Overpass pur interroger les points d'intérêt autour d'une coordonnée.
-    Retourne des notes de 1 à 5 pour les critères de localisation.
+    Trouve les coordonnées du service le plus proche pour 5 catégories clés via Overpass.
     """
-    # Exécuter une requête Overpass QL
-    # On cherche le transport (500m), écoles (1000m), commerces (500m)
     query = f"""
     [out:json][timeout:10];
     (
-      node["highway"="bus_stop"](around:500,{lat},{lon});
-      node["railway"="station"](around:1000,{lat},{lon});
-      node["amenity"~"school|college|kindergarten|university"](around:1000,{lat},{lon});
-      node["shop"~"supermarket|convenience|bakery|mall"](around:500,{lat},{lon});
-      node["amenity"~"restaurant|cafe|pharmacy|clinic|hospital"](around:500,{lat},{lon});
-    );
-    out count;
-    """
-
-    url = "https://overpass-api.de/api/interpreter"
-    try:
-        response = requests.post(url, data={"data": query}, timeout=10)
-        response.raise_for_status()
-        data = response.json()
-
-        # Overpass 'out count' retourne les totaux par type d'élément dans "elements" -> "tags"
-        counts = {"bus": 0, "ecoles": 0, "commerces": 0}
-
-        if data.get("elements") and len(data["elements"]) > 0:
-            tags = data["elements"][0].get("tags", {})
-            # Overpass renvoie les comptes par clés/valeurs exactes selon les tags trouvés.
-            # Plus simple : on a juste demandé un count global des nœuds par tag. Toutefois "out count"
-            # agrège par type. Pour éviter un parsing complexe de "out count", on exécute une approche
-            # simplifiée.
-            pass
-
-    except Exception as e:
-        print(f"Erreur Overpass: {e}")
-        pass
-
-    # =========================================================================
-    # REQUÊTE DÉTAILLÉE (si out count est complexe à parser, on rapatrie les nœuds)
-    # =========================================================================
-    query = f"""
-    [out:json][timeout:10];
-    (
-      node["highway"="bus_stop"](around:500,{lat},{lon});
-      node["railway"="station"](around:1500,{lat},{lon});
-      node["amenity"~"school|college|kindergarten"](around:1500,{lat},{lon});
-      node["shop"~"supermarket|convenience|bakery|mall"](around:1000,{lat},{lon});
-      node["amenity"~"restaurant|cafe|pharmacy"](around:1000,{lat},{lon});
+      node["highway"="bus_stop"](around:{rayon},{lat},{lon});
+      node["amenity"~"school|college"](around:{rayon},{lat},{lon});
+      node["shop"~"supermarket|convenience"](around:{rayon},{lat},{lon});
+      node["amenity"="pharmacy"](around:{rayon},{lat},{lon});
+      node["leisure"="park"](around:{rayon},{lat},{lon});
     );
     out center;
     """
-    notes = {
-        "transport": 3,
-        "ecoles": 3,
-        "commerces": 3,
-        "inoccupation": 3,  # Difficile via OSM, on met neutre
-        "demographie": 3,   # Idem
-        "quartier": 3,      # Idem
-        "stationnement": 3, # Trop variable
-        "plus_value": 3,    # Idem
+    
+    services = {
+        "bus": None,
+        "ecole": None,
+        "epicerie": None,
+        "pharmacie": None,
+        "parc": None
     }
-
+    
     try:
+        url = "https://overpass-api.de/api/interpreter"
         response = requests.post(url, data={"data": query}, timeout=10)
         data = response.json()
-
-        nb_bus = 0
-        nb_train = 0
-        nb_ecoles = 0
-        nb_commerces = 0
-
-        for element in data.get("elements", []):
-            tags = element.get("tags", {})
+        
+        # Associer chaque élement à une catégorie
+        elements_par_cat = {"bus": [], "ecole": [], "epicerie": [], "pharmacie": [], "parc": []}
+        
+        for el in data.get("elements", []):
+            tags = el.get("tags", {})
             if "highway" in tags and tags["highway"] == "bus_stop":
-                nb_bus += 1
-            if "railway" in tags and tags["railway"] == "station":
-                nb_train += 1
-            if "amenity" in tags and tags["amenity"] in ["school", "college", "kindergarten"]:
-                nb_ecoles += 1
-            if "shop" in tags or ("amenity" in tags and tags["amenity"] in ["restaurant", "cafe", "pharmacy"]):
-                nb_commerces += 1
-
-        # Attribution des notes (Heuristique simple)
-
-        # Transport: Métro/Train = gros bonus. Bus = correct.
-        if nb_train > 0:
-            notes["transport"] = 5
-        elif nb_bus >= 10:
-            notes["transport"] = 4
-        elif nb_bus >= 3:
-            notes["transport"] = 3
-        elif nb_bus > 0:
-            notes["transport"] = 2
-        else:
-            notes["transport"] = 1
-
-        # Écoles
-        if nb_ecoles >= 5:
-            notes["ecoles"] = 5
-        elif nb_ecoles >= 3:
-            notes["ecoles"] = 4
-        elif nb_ecoles >= 1:
-            notes["ecoles"] = 3
-        else:
-            notes["ecoles"] = 2  # OSM manque souvent de données sur les écoles au QC, soyons indulgents
-
-        # Commerces
-        if nb_commerces >= 20:
-            notes["commerces"] = 5
-        elif nb_commerces >= 10:
-            notes["commerces"] = 4
-        elif nb_commerces >= 4:
-            notes["commerces"] = 3
-        elif nb_commerces >= 1:
-            notes["commerces"] = 2
-        else:
-            notes["commerces"] = 1
+                elements_par_cat["bus"].append(el)
+            elif "amenity" in tags and tags["amenity"] in ["school", "college"]:
+                elements_par_cat["ecole"].append(el)
+            elif "shop" in tags and tags["shop"] in ["supermarket", "convenience"]:
+                elements_par_cat["epicerie"].append(el)
+            elif "amenity" in tags and tags["amenity"] == "pharmacy":
+                elements_par_cat["pharmacie"].append(el)
+            elif "leisure" in tags and tags["leisure"] == "park":
+                elements_par_cat["parc"].append(el)
+                
+        # Trouver le plus proche pour chaque catégorie (distance géolocalisée simple)
+        def calc_dist(lat1, lon1, lat2, lon2):
+            return math.sqrt((lat1-lat2)**2 + (lon1-lon2)**2)
+            
+        for cat, liste in elements_par_cat.items():
+            if liste:
+                proche = min(liste, key=lambda x: calc_dist(lat, lon, x.get('lat', lat), x.get('lon', lon)))
+                services[cat] = {"lat": proche.get('lat'), "lon": proche.get('lon'), "nom": proche.get('tags', {}).get('name', f"Un(e) {cat}")}
 
     except Exception as e:
-        print(f"Erreur d'analyse Overpass: {e}")
+        print(f"Erreur d'analyse proximite Overpass: {e}")
+        
+    return services
 
-    return notes
+
+def calculer_trajets_ors(lat_origine: float, lon_origine: float, cibles: Dict[str, Optional[Dict]]) -> Dict[str, any]:
+    """
+    Utilise openrouteservice (via API key) pour calculer les temps et distances
+    vers les points d'intérêts ciblés (en voiture).
+    """
+    api_key = os.environ.get("OPENROUTESERVICE_API_KEY")
+    resultats = {}
+    
+    if not api_key:
+        print("Avertissement: OPENROUTESERVICE_API_KEY non trouvée dans le .env")
+        # Retourner des valeurs vides
+        for k in cibles.keys(): resultats[k] = None
+        return resultats
+        
+    try:
+        client = openrouteservice.Client(key=api_key)
+        
+        for k, cible in cibles.items():
+            if cible and cible['lat'] and cible['lon']:
+                coords = [[lon_origine, lat_origine], [cible['lon'], cible['lat']]]
+                try:
+                    # Trajet en voiture par défaut
+                    route = client.directions(
+                        coordinates=coords,
+                        profile='driving-car',
+                        format='json'
+                    )
+                    
+                    if route and 'routes' in route and len(route['routes']) > 0:
+                        summary = route['routes'][0]['summary']
+                        resultats[k] = {
+                            "distance_km": round(summary['distance'] / 1000, 1),
+                            "temps_min": max(1, round(summary['duration'] / 60))
+                        }
+                    else:
+                        resultats[k] = None
+                except Exception as inner_e:
+                    print(f"Erreur de route pour {k}: {inner_e}")
+                    resultats[k] = None
+            else:
+                 resultats[k] = None
+                 
+    except Exception as e:
+        print(f"Erreur Client OpenRouteService: {e}")
+        for k in cibles.keys(): resultats[k] = None
+        
+    return resultats

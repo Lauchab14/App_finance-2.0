@@ -136,3 +136,101 @@ def creer_graphique_radar(details: list, region: str) -> go.Figure:
     )
 
     return fig
+
+
+def calculer_score_localisation_avance(trajets: dict, stats_demo: dict) -> dict:
+    """
+    Calcule un score sur 100 basé sur les temps de transport ORS (60 pts) 
+    et le profil démographique (40 pts).
+    """
+    points = 0
+    max_points = 100
+    details = []
+    
+    # 1. Analyse des trajets (60 points)
+    # Attribution: 12 pts max par service (5 services = 60 pts)
+    bareme_trajet = {
+        "epicerie": 12,
+        "ecole": 12,
+        "pharmacie": 12,
+        "bus": 12,
+        "parc": 12
+    }
+    
+    score_trajets = 0
+    for service, max_pts in bareme_trajet.items():
+        trajet_info = trajets.get(service)
+        if trajet_info and trajet_info.get("temps_min"):
+            t = trajet_info["temps_min"]
+            if t <= 3: pts = max_pts
+            elif t <= 5: pts = max_pts * 0.8
+            elif t <= 10: pts = max_pts * 0.5
+            elif t <= 15: pts = max_pts * 0.2
+            else: pts = 0
+            
+            score_trajets += pts
+            details.append({"critere": f"Proximité {service}", "points": round(pts, 1), "max": max_pts, "valeur": f"{t} min"})
+        else:
+            details.append({"critere": f"Proximité {service}", "points": 0, "max": max_pts, "valeur": "Non trouvé / Inconnu"})
+            
+    points += score_trajets
+    
+    # 2. Analyse démographique (40 points)
+    # Revenu médian (15 pts)
+    pts_revenu = 0
+    rev = stats_demo.get("revenu_median")
+    if rev:
+        if rev > 90000: pts_revenu = 15
+        elif rev > 75000: pts_revenu = 12
+        elif rev > 60000: pts_revenu = 8
+        elif rev > 45000: pts_revenu = 4
+        else: pts_revenu = 0
+        details.append({"critere": "Revenu médian", "points": pts_revenu, "max": 15, "valeur": f"{rev:,.0f} $".replace(',', ' ')})
+    else:
+        details.append({"critere": "Revenu médian", "points": 0, "max": 15, "valeur": "Inconnu"})
+        
+    # Proportion de locataires (15 pts) - indique la demande locative
+    pts_locataires = 0
+    loc_pct = stats_demo.get("locataires_pct")
+    if loc_pct is not None:
+        if loc_pct >= 60: pts_locataires = 15
+        elif loc_pct >= 40: pts_locataires = 12
+        elif loc_pct >= 25: pts_locataires = 8
+        elif loc_pct >= 10: pts_locataires = 4
+        else: pts_locataires = 0
+        details.append({"critere": "Proportion locataires", "points": pts_locataires, "max": 15, "valeur": f"{loc_pct}%"})
+    else:
+        details.append({"critere": "Proportion locataires", "points": 0, "max": 15, "valeur": "Inconnu"})
+
+    # Croissance de la population (10 pts)
+    pts_croissance = 0
+    croissance = stats_demo.get("croissance_pop")
+    if croissance is not None:
+        if croissance >= 5.0: pts_croissance = 10
+        elif croissance >= 2.0: pts_croissance = 8
+        elif croissance >= 0.0: pts_croissance = 5
+        elif croissance >= -2.0: pts_croissance = 2
+        else: pts_croissance = 0
+        details.append({"critere": "Croissance population", "points": pts_croissance, "max": 10, "valeur": f"{croissance}%"})
+    else:
+        details.append({"critere": "Croissance population", "points": 0, "max": 10, "valeur": "Inconnu"})
+
+    points += pts_revenu + pts_locataires + pts_croissance
+    points = round(points, 1)
+
+    # 3. Résumé
+    if points >= 80:
+        resume = "🌟 **Score Exceptionnel** : L'emplacement offre un accès rapide à tous les services clés et la démographie locale soutient une très forte demande locative. Risque de vacance très faible."
+    elif points >= 60:
+        resume = "🟢 **Très Bon Score** : Le secteur est attractif. Les services de base sont facilement accessibles et le marché locatif y est sain."
+    elif points >= 40:
+        resume = "🟡 **Score Moyen** : L'emplacement est correct mais présente des vulnérabilités (ex: services éloignés ou faible demande locative). Un véhicule sera probablement nécessaire pour les locataires."
+    else:
+        resume = "🔴 **Score Faible** : Zone peu dynamique ou isolée. Le profil démographique et le manque de services de proximité augmentent le risque locatif."
+
+    return {
+        "score_total": points,
+        "max_score": max_points,
+        "details": details,
+        "resume": resume
+    }

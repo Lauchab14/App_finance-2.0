@@ -3,3 +3,6 @@ pandas
 plotly
 numpy
 numpy-financial
+openrouteservice
+python-dotenv
+beautifulsoup4
