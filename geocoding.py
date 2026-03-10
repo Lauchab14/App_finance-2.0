@@ -224,15 +224,23 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
     }
     
     try:
-        url = "https://overpass-api.de/api/interpreter"
-        data = None
+        urls = [
+            "https://overpass-api.de/api/interpreter",
+            "https://lz4.overpass-api.de/api/interpreter",
+            "https://z.overpass-api.de/api/interpreter",
+            "https://overpass.kumi.systems/api/interpreter"
+        ]
         
-        for tentative in range(2):
-            response = requests.post(url, data={"data": query}, timeout=25)
-            if response.status_code == 200 and 'application/json' in response.headers.get('content-type', ''):
-                data = response.json()
-                break
-            time.sleep(3)
+        data = None
+        for url in urls:
+            try:
+                response = requests.post(url, data={"data": query}, timeout=25)
+                if response.status_code == 200 and 'application/json' in response.headers.get('content-type', ''):
+                    data = response.json()
+                    break
+            except Exception:
+                pass
+            time.sleep(1)
         
         if not data:
             print(f"Overpass n'a pas répondu correctement")
