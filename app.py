@@ -762,7 +762,7 @@ with tab3:
 
                     # 2. Services de proximité
                     st.info("Recherche des services à proximité (OpenStreetMap)...")
-                    cibles_services = obtenir_services_proximite(_lat, _lon, rayon=1500)
+                    cibles_services = obtenir_services_proximite(_lat, _lon, rayon=3000)
                     
                     # 3. Trajets et distances
                     st.info("Calcul des temps de parcours (OpenRouteService)...")

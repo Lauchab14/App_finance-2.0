@@ -141,9 +141,23 @@ def determiner_region_gps(lat: float, lon: float, ville: str) -> str:
     ville = ville.lower()
 
     # Dictionnaire simplifié pour mapper les villes aux régions
-    villes_metro = ["montréal", "montreal", "laval", "longueuil", "brossard", "terrebonne", "repentigny"]
-    villes_urbaines = ["québec", "quebec", "lévis", "levis", "gatineau", "sherbrooke", "trois-rivières", "trois-rivieres", "saguenay"]
-    villes_semi = ["drummondville", "saint-hyacinthe", "granby", "victoriaville", "rimouski", "shawinigan"]
+    villes_metro = ["montréal", "montreal", "laval", "longueuil", "brossard", "terrebonne", "repentigny",
+                    "blainville", "mirabel", "saint-jérôme", "saint-jerome", "châteauguay", "chateauguay",
+                    "saint-eustache", "vaudreuil", "mascouche", "boisbriand", "sainte-thérèse",
+                    "boucherville", "saint-bruno", "varennes", "beloeil", "chambly", "carignan",
+                    "deux-montagnes", "rosemère", "rosemere", "candiac", "la prairie", "saint-constant",
+                    "saint-lambert", "saint-hubert", "saint-jean-sur-richelieu", "saint-jean"]
+    villes_urbaines = ["québec", "quebec", "lévis", "levis", "gatineau", "sherbrooke",
+                      "trois-rivières", "trois-rivieres", "saguenay", "chicoutimi", "jonquière",
+                      "saint-nicolas", "charlesbourg", "beauport", "cap-rouge", "sainte-foy"]
+    villes_semi = ["drummondville", "saint-hyacinthe", "granby", "victoriaville", "rimouski",
+                  "shawinigan", "saint-georges", "thetford", "magog", "alma",
+                  "rivière-du-loup", "riviere-du-loup", "val-d'or", "val-dor", "rouyn",
+                  "joliette", "sorel", "sainte-marie", "ste-marie", "saint-raymond",
+                  "montmagny", "la malbaie", "baie-comeau", "sept-îles", "sept-iles",
+                  "matane", "amos", "cowansville", "saint-félicien", "roberval",
+                  "saint-bernard", "beauceville", "saint-joseph", "lac-etchemin",
+                  "saint-lazare", "sainte-julie", "terrebonne", "lachute", "hawkesbury"]
 
     for v in villes_metro:
         if v in ville:
@@ -161,18 +175,25 @@ def determiner_region_gps(lat: float, lon: float, ville: str) -> str:
     return "Rurale (Beauce, Bas-St-Laurent, Abitibi, etc.)"
 
 
-def obtenir_services_proximite(lat: float, lon: float, rayon: int = 1500) -> Dict[str, Optional[Dict]]:
+def obtenir_services_proximite(lat: float, lon: float, rayon: int = 3000) -> Dict[str, Optional[Dict]]:
     """
     Trouve les coordonnées du service le plus proche pour 5 catégories clés via Overpass.
+    Recherche à la fois les noeuds (node) et les batiments (way) pour maximiser la couverture.
     """
     query = f"""
-    [out:json][timeout:10];
+    [out:json][timeout:15];
     (
       node["highway"="bus_stop"](around:{rayon},{lat},{lon});
-      node["amenity"~"school|college"](around:{rayon},{lat},{lon});
-      node["shop"~"supermarket|convenience"](around:{rayon},{lat},{lon});
+      node["railway"="station"](around:{rayon},{lat},{lon});
+      node["amenity"~"school|college|kindergarten|university"](around:{rayon},{lat},{lon});
+      way["amenity"~"school|college|kindergarten|university"](around:{rayon},{lat},{lon});
+      node["shop"~"supermarket|convenience|greengrocer"](around:{rayon},{lat},{lon});
+      way["shop"~"supermarket|convenience|greengrocer"](around:{rayon},{lat},{lon});
       node["amenity"="pharmacy"](around:{rayon},{lat},{lon});
-      node["leisure"="park"](around:{rayon},{lat},{lon});
+      node["shop"="chemist"](around:{rayon},{lat},{lon});
+      way["amenity"="pharmacy"](around:{rayon},{lat},{lon});
+      node["leisure"~"park|playground|garden"](around:{rayon},{lat},{lon});
+      way["leisure"~"park|playground|garden"](around:{rayon},{lat},{lon});
     );
     out center;
     """
@@ -187,24 +208,48 @@ def obtenir_services_proximite(lat: float, lon: float, rayon: int = 1500) -> Dic
     
     try:
         url = "https://overpass-api.de/api/interpreter"
-        response = requests.post(url, data={"data": query}, timeout=10)
-        data = response.json()
+        data = None
+        
+        # Retry jusqu'à 2 fois en cas de rate-limit ou d'erreur
+        for tentative in range(2):
+            response = requests.post(url, data={"data": query}, timeout=20)
+            if response.status_code == 200 and response.headers.get('content-type', '').startswith('application/json'):
+                data = response.json()
+                break
+            elif response.status_code == 429 or response.status_code == 504:
+                # Rate limited ou timeout, attendre et réessayer
+                time.sleep(3)
+            else:
+                # Autre erreur, on réessaie une fois
+                time.sleep(2)
+        
+        if not data:
+            print(f"Overpass n'a pas répondu correctement après 2 tentatives (status: {response.status_code})")
+            return services
         
         # Associer chaque élement à une catégorie
         elements_par_cat = {"bus": [], "ecole": [], "epicerie": [], "pharmacie": [], "parc": []}
         
         for el in data.get("elements", []):
             tags = el.get("tags", {})
-            if "highway" in tags and tags["highway"] == "bus_stop":
-                elements_par_cat["bus"].append(el)
-            elif "amenity" in tags and tags["amenity"] in ["school", "college"]:
-                elements_par_cat["ecole"].append(el)
-            elif "shop" in tags and tags["shop"] in ["supermarket", "convenience"]:
-                elements_par_cat["epicerie"].append(el)
-            elif "amenity" in tags and tags["amenity"] == "pharmacy":
-                elements_par_cat["pharmacie"].append(el)
-            elif "leisure" in tags and tags["leisure"] == "park":
-                elements_par_cat["parc"].append(el)
+            # Pour les 'way', les coordonnées sont dans 'center'
+            el_lat = el.get('lat') or (el.get('center', {}).get('lat'))
+            el_lon = el.get('lon') or (el.get('center', {}).get('lon'))
+            if not el_lat or not el_lon:
+                continue
+                
+            el_info = {"lat": el_lat, "lon": el_lon, "tags": tags}
+            
+            if tags.get("highway") == "bus_stop" or tags.get("railway") == "station":
+                elements_par_cat["bus"].append(el_info)
+            if tags.get("amenity") in ["school", "college", "kindergarten", "university"]:
+                elements_par_cat["ecole"].append(el_info)
+            if tags.get("shop") in ["supermarket", "convenience", "greengrocer"]:
+                elements_par_cat["epicerie"].append(el_info)
+            if tags.get("amenity") == "pharmacy" or tags.get("shop") == "chemist":
+                elements_par_cat["pharmacie"].append(el_info)
+            if tags.get("leisure") in ["park", "playground", "garden"]:
+                elements_par_cat["parc"].append(el_info)
                 
         # Trouver le plus proche pour chaque catégorie (distance géolocalisée simple)
         def calc_dist(lat1, lon1, lat2, lon2):
@@ -212,8 +257,8 @@ def obtenir_services_proximite(lat: float, lon: float, rayon: int = 1500) -> Dic
             
         for cat, liste in elements_par_cat.items():
             if liste:
-                proche = min(liste, key=lambda x: calc_dist(lat, lon, x.get('lat', lat), x.get('lon', lon)))
-                services[cat] = {"lat": proche.get('lat'), "lon": proche.get('lon'), "nom": proche.get('tags', {}).get('name', f"Un(e) {cat}")}
+                proche = min(liste, key=lambda x: calc_dist(lat, lon, x['lat'], x['lon']))
+                services[cat] = {"lat": proche['lat'], "lon": proche['lon'], "nom": proche.get('tags', {}).get('name', cat.capitalize())}
 
     except Exception as e:
         print(f"Erreur d'analyse proximite Overpass: {e}")
