@@ -214,7 +214,10 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
     
     services = {
         "epicerie": [],
-        "ecole": [],
+        "primaire": [],
+        "secondaire": [],
+        "cegep": [],
+        "universite": [],
         "pharmacie": [],
         "bus": [],
         "parc": [],
@@ -270,8 +273,27 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
                 info["nom"] = nom or "Arrêt de bus"
                 services["bus"].append(info)
             elif tags.get("amenity") in ["school", "college", "kindergarten", "university"]:
-                info["nom"] = nom or "École"
-                services["ecole"].append(info)
+                am = tags.get("amenity")
+                if am == "kindergarten":
+                    info["nom"] = nom or "École primaire / Garderie"
+                    services["primaire"].append(info)
+                elif am == "school":
+                    nom_lower = nom.lower()
+                    if any(x in nom_lower for x in ["secondaire", "high school", "polyvalente", "sec."]):
+                        info["nom"] = nom or "École secondaire"
+                        services["secondaire"].append(info)
+                    elif "collège" in nom_lower or "college" in nom_lower:
+                        info["nom"] = nom or "École secondaire (Collège privé)"
+                        services["secondaire"].append(info)
+                    else:
+                        info["nom"] = nom or "École primaire"
+                        services["primaire"].append(info)
+                elif am == "college":
+                    info["nom"] = nom or "Cégep / Collège"
+                    services["cegep"].append(info)
+                elif am == "university":
+                    info["nom"] = nom or "Université"
+                    services["universite"].append(info)
             elif tags.get("shop") in ["supermarket", "convenience", "greengrocer"]:
                 info["nom"] = nom or "Épicerie"
                 services["epicerie"].append(info)

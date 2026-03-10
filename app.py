@@ -953,7 +953,10 @@ with tab3:
                 # 5. Carte Folium
                 _config_services_carte = {
                     "epicerie":  {"label": "Epicerie",  "color": "green",     "icon": "shopping-cart"},
-                    "ecole":     {"label": "Ecole",     "color": "blue",      "icon": "graduation-cap"},
+                    "primaire":  {"label": "École primaire", "color": "blue", "icon": "child"},
+                    "secondaire":{"label": "École secondaire", "color": "cadetblue", "icon": "book"},
+                    "cegep":     {"label": "Cégep", "color": "darkblue", "icon": "university"},
+                    "universite":{"label": "Université", "color": "lightgray", "icon": "graduation-cap"},
                     "pharmacie": {"label": "Pharmacie", "color": "purple",    "icon": "plus-square"},
                     "bus":       {"label": "Transport", "color": "orange",    "icon": "bus"},
                     "parc":      {"label": "Parc",      "color": "darkgreen", "icon": "tree"},
@@ -1052,7 +1055,10 @@ with tab3:
             st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
             titres_cat = {
                 "epicerie":  "🛒 Épiceries & Supermarchés",
-                "ecole":     "🏫 Écoles & Institutions",
+                "primaire":  "🎒 Écoles Primaires",
+                "secondaire":"📓 Écoles Secondaires",
+                "cegep":     "📚 Cégeps",
+                "universite":"🎓 Universités",
                 "pharmacie": "💊 Pharmacies",
                 "bus":       "🚌 Transport en Commun",
                 "parc":      "🌳 Parcs & Loisirs",

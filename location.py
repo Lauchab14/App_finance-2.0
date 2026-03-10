@@ -153,7 +153,10 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
     # Attribution: 11 pts max par service (5 services = 55 pts)
     bareme_trajet = {
         "epicerie": 11,
-        "ecole": 11,
+        "primaire": 5,
+        "secondaire": 3,
+        "cegep": 2,
+        "universite": 1,
         "pharmacie": 11,
         "bus": 11,
         "parc": 11
