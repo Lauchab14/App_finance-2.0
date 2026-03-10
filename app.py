@@ -5,6 +5,8 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
+import folium
+from streamlit_folium import st_folium
 
 from config import (
     AMORTISSEMENT_DEFAUT,
@@ -39,7 +41,7 @@ from finance import (
     calculer_taxes_scolaires,
 )
 from location import calculer_score_localisation_avance
-from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_tous_services
+from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_tous_services, obtenir_loisirs_ville
 from demographie import analyser_demographie
 from dotenv import load_dotenv
 
@@ -245,60 +247,93 @@ if "adresse_choisie" not in st.session_state:
     st.session_state.adresse_choisie = None
 if "notes_auto" not in st.session_state:
     st.session_state.notes_auto = None
+if "analyse_locale_auto" not in st.session_state:
+    st.session_state.analyse_locale_auto = False
+if "derniere_adresse_analysee" not in st.session_state:
+    st.session_state.derniere_adresse_analysee = None
 
 # =============================================================================
 # SECTION 1 — INFORMATIONS DE L'IMMEUBLE
 # =============================================================================
 st.header("📋 Informations de l'immeuble")
 
+# ── Bloc adresse — pleine largeur ────────────────────────────────────────────
+st.markdown("#### 📍 Adresse de l'immeuble")
+
+# Champ de recherche principal (pleine largeur)
+recherche_adr = st.text_input(
+    "Rechercher une adresse au Québec",
+    placeholder="Commencez à écrire : 123 rue des Érables, Sainte-Marie…",
+    key="adr_recherche",
+    label_visibility="collapsed",
+)
+# Déclencher dès 3 caractères
+if len(recherche_adr.strip()) >= 3:
+    st.session_state.sugg_adresses = rechercher_adresses(recherche_adr.strip())
+elif len(recherche_adr.strip()) == 0:
+    st.session_state.sugg_adresses = []
+
+# Selectbox de suggestions
+if st.session_state.sugg_adresses:
+    options_adr = ["-- Sélectionner une adresse --"] + [s["display_name"] for s in st.session_state.sugg_adresses]
+    choix_adr = st.selectbox("Adresse sélectionnée", options_adr, key="selectbox_adresse", label_visibility="collapsed")
+
+    if choix_adr != "-- Sélectionner une adresse --":
+        for s in st.session_state.sugg_adresses:
+            if s["display_name"] == choix_adr:
+                if st.session_state.adresse_choisie != s:
+                    st.session_state.adresse_choisie = s
+                    st.session_state.analyse_locale_auto = True
+                    st.session_state.derniere_adresse_analysee = s["display_name"]
+                    # Extraire ville et CP depuis les données brutes Nominatim
+                    raw_addr = s.get("raw", {}).get("address", {})
+                    st.session_state.adr_ville_affich = s.get("ville", raw_addr.get("city", raw_addr.get("town", raw_addr.get("municipality", ""))))
+                    st.session_state.adr_cp_affich    = raw_addr.get("postcode", "")
+                    st.session_state.adr_rue_affich   = s["display_name"].split(",")[0].strip()
+                break
+
+
+
+# Carte visuelle de confirmation
+adresse = ""
+ville    = "Montréal"
+region_auto = None
+if st.session_state.adresse_choisie:
+    adresse = st.session_state.adresse_choisie["display_name"]
+    ville   = st.session_state.adresse_choisie.get("ville", "Montréal")
+    lat     = st.session_state.adresse_choisie["lat"]
+    lon     = st.session_state.adresse_choisie["lon"]
+    region_auto = determiner_region_gps(lat, lon, ville)
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(135deg,rgba(99,110,250,0.12),rgba(99,110,250,0.04));
+                    border:1px solid rgba(99,110,250,0.35); border-radius:10px;
+                    padding:0.8rem 1.1rem; margin-top:0.4rem; margin-bottom:0.8rem;">
+            <div style="font-size:0.72rem;color:#6b7280;margin-bottom:0.15rem; font-weight:500;">✅ Adresse confirmée</div>
+            <div style="font-size:0.97rem;font-weight:700;color:#1e1b4b;">{adresse}</div>
+            <div style="font-size:0.76rem;color:#374151;margin-top:0.25rem;">
+                📍 {ville} &nbsp;&middot;&nbsp; {region_auto.split('(')[0].strip()}
+                &nbsp;&middot;&nbsp; GPS : {lat:.5f}, {lon:.5f}
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+st.divider()
+
+# ── Autres informations (deux colonnes) ──────────────────────────────────────
 col1, col2 = st.columns(2)
 with col1:
-    recherche_adr = st.text_input("Rechercher une adresse au Québec", placeholder="123 rue Exemple, Québec")
-    if recherche_adr and len(recherche_adr) > 4:
-        st.session_state.sugg_adresses = rechercher_adresses(recherche_adr)
-    
-    if st.session_state.sugg_adresses:
-        options = ["-- Sélectionner --"] + [s["display_name"] for s in st.session_state.sugg_adresses]
-        choix = st.selectbox("Suggestions d'adresses", options)
-        
-        if choix != "-- Sélectionner --":
-            # Trouver l'adresse choisie
-            for s in st.session_state.sugg_adresses:
-                if s["display_name"] == choix:
-                    st.session_state.adresse_choisie = s
-                    break
 
-    adresse = ""
-    ville = "Montréal" # par défaut
-    region_auto = None
-    
-    if st.session_state.adresse_choisie:
-        adresse = st.session_state.adresse_choisie["display_name"]
-        ville = st.session_state.adresse_choisie.get("ville", "Montréal")
-        lat = st.session_state.adresse_choisie["lat"]
-        lon = st.session_state.adresse_choisie["lon"]
-        region_auto = determiner_region_gps(lat, lon, ville)
-        st.success(f"📍 Localisée à {ville} ({region_auto.split('(')[0].strip()})")
-
-    st.text_input("Adresse confirmée", value=adresse, disabled=True)
-
-    # Assigner la ville pour la taxation
+    # Taux municipal calculé en arrière-plan selon la ville détectée
     ville_taxe = "Autre (entrer manuellement)"
     for v in TAUX_MUNICIPAUX.keys():
         if v.lower() in ville.lower():
             ville_taxe = v
             break
-            
-    ville_sel = st.selectbox("Ville pour taxation", options=list(TAUX_MUNICIPAUX.keys()), index=list(TAUX_MUNICIPAUX.keys()).index(ville_taxe))
+    taux_municipal = TAUX_MUNICIPAUX.get(ville_taxe, 0.80)
 
-    if ville_sel == "Autre (entrer manuellement)":
-        taux_municipal = st.number_input(
-            "Taux de taxation municipal (par 100$)", min_value=0.0,
-            max_value=3.0, value=0.80, step=0.01, format="%.4f",
-        )
-    else:
-        taux_municipal = TAUX_MUNICIPAUX[ville_sel]
-        st.info(f"Taux municipal : **{taux_municipal:.4f}$ / 100$**")
 
 with col2:
     prix_achat = st.number_input(
@@ -430,7 +465,7 @@ resultats = analyser_annee1(
     prix_achat=prix_achat,
     evaluation_municipale=evaluation_municipale,
     taux_municipal_par_100=taux_municipal,
-    ville=ville_sel,
+    ville=ville_taxe,
     loyers_mensuels_total=loyers_mensuels_total,
     taux_vacance=taux_vacance,
     assurance=assurance,
@@ -742,142 +777,166 @@ with tab3:
         
         
 
-        if st.button("🚀 Lancer l'Analyse Avancée (Services & Démographie)", type="primary"):
-            with st.spinner("Analyse de l'emplacement en cours (peut prendre 10-20 secondes)..."):
-                
-                # 1. Carte interactive
-                df_map = pd.DataFrame({'lat': [_lat], 'lon': [_lon]})
-                st.map(df_map, zoom=14, use_container_width=True)
+        # Lancement automatique si nouvelle adresse sélectionnée, ou bouton manuel
+        _lancer = st.session_state.get("analyse_locale_auto", False)
 
-                # 2. Tous les services dans un rayon de 5 km
-                st.info("Recherche de TOUS les services à proximité (OpenStreetMap)...")
-                tous_services = obtenir_tous_services(_lat, _lon, rayon=5000)
-                
-                # 3. Démographie locale
-                st.info("Analyse démographique locale (topologie des bâtiments)...")
-                stats_demo = analyser_demographie(_lat, _lon, _region)
-
-                # 4. Score global (utilise le service le plus proche de chaque catégorie)
-                trajets_proches = {}
-                for cat, liste in tous_services.items():
-                    if liste:
-                        trajets_proches[cat] = {
-                            "distance_km": liste[0]["distance_km"],
-                            "temps_min": liste[0]["temps_min"]
-                        }
-                    else:
-                        trajets_proches[cat] = None
-                
-                resultat_score = calculer_score_localisation_avance(trajets_proches, stats_demo, lat=_lat, lon=_lon)
-
-                st.markdown("---")
-                
-                # --- SCORE ---
-                score_total = resultat_score['score_total']
-                if score_total >= 80: badge_class = "high"
-                elif score_total >= 60: badge_class = "medium"
-                else: badge_class = "low"
-                
+        col_btn1, col_btn2 = st.columns([3, 1])
+        with col_btn1:
+            if st.button("🔄 Relancer l'analyse", help="Relancer manuellement l'analyse de localisation"):
+                _lancer = True
+        with col_btn2:
+            if _lancer:
                 st.markdown(
-                    f'<div style="text-align:center;">'
-                    f'<p style="color:#8888a8;margin-bottom:0;">Score d\'Attractivité Locative</p>'
-                    f'<div class="score-badge {badge_class}">{score_total}/100</div>'
-                    f"</div>",
+                    "<div style='padding:0.45rem 0;color:#4ade80;font-size:0.85rem;'>⚡ Analyse automatique…</div>",
                     unsafe_allow_html=True,
                 )
-                st.markdown(f"> {resultat_score['resume']}")
-                
-                st.divider()
-                
-                # --- DÉMOGRAPHIE ---
-                st.markdown("### 🏘️ Synthèse Démographique")
-                col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
-                
-                with col_d1:
-                    val_pop = stats_demo.get('population')
-                    st.metric("Population", f"{val_pop:,}".replace(',', ' ') if val_pop else "N/D")
-                with col_d2:
-                    val_age = stats_demo.get('age_median')
-                    st.metric("Âge Médian", f"{val_age} ans" if val_age else "N/D")
-                with col_d3:
-                    val_loc = stats_demo.get('locataires_pct')
-                    st.metric("Locataires", f"{val_loc}%" if val_loc else "N/D")
-                with col_d4:
-                    val_rev = stats_demo.get('revenu_median')
-                    st.metric("Revenu Médian", f"{val_rev:,} $".replace(',', ' ') if val_rev else "N/D")
-                with col_d5:
-                    val_croissance = stats_demo.get('croissance_pop')
-                    delta_color = "normal"
-                    st.metric("Croissance (5 ans)", f"{val_croissance}%" if val_croissance is not None else "N/D",
-                             delta=f"{val_croissance}%" if val_croissance is not None else None)
-                    
-                ville_a = stats_demo.get('ville_analyse', '')
-                st.caption(f"📊 _{stats_demo.get('source', '')}_")
 
-                st.divider()
-                
-                # --- LOISIRS & COMMODITÉS (COMPTEURS) ---
-                st.markdown("### 🍔 Loisirs & Commodités (Rayon de 5 km)")
-                col_c1, col_c2, col_c3 = st.columns(3)
-                
-                with col_c1:
-                    nb_restos = len(tous_services.get("restaurant", []))
-                    st.metric("Restaurants & Fast-Foods", f"{nb_restos}")
-                with col_c2:
-                    nb_loisirs = len(tous_services.get("loisir", []))
-                    st.metric("Centres de loisirs & Sports", f"{nb_loisirs}")
-                with col_c3:
-                    nb_essence = len(tous_services.get("essence", []))
-                    st.metric("Stations-service", f"{nb_essence}")
-                    
-                st.caption("*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.)*")
+        if _lancer:
+            st.session_state.analyse_locale_auto = False  # reset du flag
+            with st.spinner("Analyse de l'emplacement en cours (peut prendre 10-20 secondes)..."):
 
-                st.divider()
-                # --- GRANDES VILLES ---
-                st.markdown("### 🏢 Grandes villes les plus proches")
-                
-                top_villes = resultat_score.get("top_villes")
-                if top_villes:
-                    v_main, d_main = top_villes[0]
-                    st.write(f"**1.** {v_main} à {d_main} km")
-                    
-                    autres = [f"**{i+2}.** {v} à {d} km" for i, (v, d) in enumerate(top_villes[1:])]
-                    for autre in autres:
-                        st.write(autre)
-                else:
-                    st.write("Aucune grande ville trouvée.")
-                
-                st.divider()
-                
-                # --- TOUS LES SERVICES ---
-                st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
-                titres_cat = {
-                    "epicerie": "🛒 Épiceries & Supermarchés",
-                    "ecole": "🏫 Écoles & Institutions",
-                    "pharmacie": "💊 Pharmacies",
-                    "bus": "🚌 Transport en Commun",
-                    "parc": "🌳 Parcs & Loisirs"
+                # 1. Services proches (rayon 5 km)
+                st.info("Recherche de TOUS les services à proximité (OpenStreetMap)...")
+                st.session_state.loc_tous_services = obtenir_tous_services(_lat, _lon, rayon=5000)
+
+                # 2. Loisirs & commodités dans les limites municipales OSM
+                _ville_loisirs = st.session_state.adresse_choisie.get("ville", "")
+                st.info(f"Comptage des loisirs & commodités ({_ville_loisirs})...")
+                st.session_state.loc_loisirs_ville = obtenir_loisirs_ville(_ville_loisirs, _lat, _lon)
+                st.session_state.loc_ville_loisirs_nom = _ville_loisirs
+
+                # 3. Démographie locale
+                st.info("Analyse démographique locale...")
+                st.session_state.loc_stats_demo = analyser_demographie(_lat, _lon, _region)
+
+                # 4. Score de localisation
+                trajets_proches = {}
+                for cat, liste in st.session_state.loc_tous_services.items():
+                    trajets_proches[cat] = {"distance_km": liste[0]["distance_km"], "temps_min": liste[0]["temps_min"]} if liste else None
+                st.session_state.loc_score = calculer_score_localisation_avance(trajets_proches, st.session_state.loc_stats_demo, lat=_lat, lon=_lon)
+
+                # 5. Carte Folium
+                _config_services_carte = {
+                    "epicerie":  {"label": "Epicerie",  "color": "green",     "icon": "shopping-cart"},
+                    "ecole":     {"label": "Ecole",     "color": "blue",      "icon": "graduation-cap"},
+                    "pharmacie": {"label": "Pharmacie", "color": "purple",    "icon": "plus-square"},
+                    "bus":       {"label": "Transport", "color": "orange",    "icon": "bus"},
+                    "parc":      {"label": "Parc",      "color": "darkgreen", "icon": "tree"},
                 }
-                
-                for cat_key, cat_titre in titres_cat.items():
-                    liste = tous_services.get(cat_key, [])
-                    nb = len(liste)
-                    
-                    with st.expander(f"{cat_titre} ({nb} trouvé{'s' if nb > 1 else ''})", expanded=(nb > 0)):
-                        if liste:
-                            rows = []
-                            for s in liste:
-                                rows.append({
-                                    "Nom": s['nom'],
-                                    "Distance": f"{s['distance_km']} km",
-                                    "Temps estimé": f"~{s['temps_min']} min"
-                                })
-                            st.table(pd.DataFrame(rows))
-                        else:
-                            st.write("Aucun trouvé dans un rayon de 5 km.")
-                
-                with st.expander("Voir le détail des points (Score / 100)"):
-                    st.dataframe(pd.DataFrame(resultat_score['details']), use_container_width=True)
+                m = folium.Map(location=[_lat, _lon], zoom_start=15, tiles="CartoDB positron")
+                folium.Marker(
+                    location=[_lat, _lon],
+                    popup=folium.Popup(f"<b>Immeuble analysé</b><br>{_adresse}", max_width=300),
+                    tooltip="🏠 Immeuble analysé",
+                    icon=folium.Icon(color="red", icon="home", prefix="fa"),
+                ).add_to(m)
+                for cat_key, cfg in _config_services_carte.items():
+                    for s in st.session_state.loc_tous_services.get(cat_key, [])[:5]:
+                        nom_s = s["nom"] if s["nom"] else cfg["label"]
+                        folium.Marker(
+                            location=[s["lat"], s["lon"]],
+                            popup=folium.Popup(f"<b>{nom_s}</b><br>📍 {s['distance_km']:.2f} km — ⏱ ~{s['temps_min']} min", max_width=250),
+                            tooltip=f"{nom_s} ({s['distance_km']:.2f} km)",
+                            icon=folium.Icon(color=cfg["color"], icon=cfg["icon"], prefix="fa"),
+                        ).add_to(m)
+                st.session_state.loc_carte = m
+
+        # ── Affichage des résultats (persistés dans session_state) ──────────
+        if "loc_score" in st.session_state:
+            tous_services   = st.session_state.loc_tous_services
+            loisirs_ville   = st.session_state.loc_loisirs_ville
+            _ville_loisirs  = st.session_state.loc_ville_loisirs_nom
+            stats_demo      = st.session_state.loc_stats_demo
+            resultat_score  = st.session_state.loc_score
+
+            # Carte
+            st.subheader("🗺️ Carte Interactive — Immeuble & Services Proches")
+            st.caption("🏠 Rouge : immeuble | 🟢 Vert : épiceries | 🔵 Bleu : écoles | 🟣 Violet : pharmacies | 🟠 Orange : transport | 🌲 Vert foncé : parcs")
+            st_folium(st.session_state.loc_carte, use_container_width=True, height=500, returned_objects=[])
+
+            st.markdown("---")
+
+            # Score
+            score_total = resultat_score['score_total']
+            badge_class = "high" if score_total >= 80 else ("medium" if score_total >= 60 else "low")
+            st.markdown(
+                f'<div style="text-align:center;">'
+                f'<p style="color:#8888a8;margin-bottom:0;">Score d\'Attractivité Locative</p>'
+                f'<div class="score-badge {badge_class}">{score_total}/100</div>'
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+            st.markdown(f"> {resultat_score['resume']}")
+            st.divider()
+
+            # Démographie
+            st.markdown("### 🏘️ Synthèse Démographique")
+            col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
+            with col_d1:
+                val_pop = stats_demo.get('population')
+                st.metric("Population", f"{val_pop:,}".replace(',', ' ') if val_pop else "N/D")
+            with col_d2:
+                val_age = stats_demo.get('age_median')
+                st.metric("Âge Médian", f"{val_age} ans" if val_age else "N/D")
+            with col_d3:
+                val_loc = stats_demo.get('locataires_pct')
+                st.metric("Locataires", f"{val_loc}%" if val_loc else "N/D")
+            with col_d4:
+                val_rev = stats_demo.get('revenu_median')
+                st.metric("Revenu Médian", f"{val_rev:,} $".replace(',', ' ') if val_rev else "N/D")
+            with col_d5:
+                val_croissance = stats_demo.get('croissance_pop')
+                st.metric("Croissance (5 ans)", f"{val_croissance}%" if val_croissance is not None else "N/D",
+                         delta=f"{val_croissance}%" if val_croissance is not None else None)
+            st.caption(f"📊 _{stats_demo.get('source', '')}_")
+            st.divider()
+
+            # Loisirs & Commodités
+            st.markdown(f"### 🍔 Loisirs & Commodités — {_ville_loisirs}")
+            col_c1, col_c2, col_c3 = st.columns(3)
+            with col_c1:
+                st.metric("Restaurants & Fast-Foods", f"{loisirs_ville['nb_restos']:,}".replace(",", " "))
+            with col_c2:
+                st.metric("Centres de loisirs & Sports", f"{loisirs_ville['nb_loisirs']:,}".replace(",", " "))
+            with col_c3:
+                st.metric("Stations-service", f"{loisirs_ville['nb_essence']:,}".replace(",", " "))
+            st.caption(f"*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.) — Source : {loisirs_ville['methode']}*")
+            st.divider()
+
+            # Grandes villes proches
+            st.markdown("### 🏢 Grandes villes les plus proches")
+            top_villes = resultat_score.get("top_villes")
+            if top_villes:
+                for i, (v, d) in enumerate(top_villes):
+                    st.write(f"**{i+1}.** {v} à {d} km")
+            else:
+                st.write("Aucune grande ville trouvée.")
+            st.divider()
+
+            # Services à proximité
+            st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
+            titres_cat = {
+                "epicerie":  "🛒 Épiceries & Supermarchés",
+                "ecole":     "🏫 Écoles & Institutions",
+                "pharmacie": "💊 Pharmacies",
+                "bus":       "🚌 Transport en Commun",
+                "parc":      "🌳 Parcs & Loisirs",
+            }
+            for cat_key, cat_titre in titres_cat.items():
+                liste = tous_services.get(cat_key, [])
+                nb = len(liste)
+                with st.expander(f"{cat_titre} ({nb} trouvé{'s' if nb > 1 else ''})", expanded=(nb > 0)):
+                    if liste:
+                        rows = [{"Nom": s['nom'], "Distance": f"{s['distance_km']} km", "Temps estimé": f"~{s['temps_min']} min"} for s in liste]
+                        st.table(pd.DataFrame(rows))
+                    else:
+                        st.write("Aucun trouvé dans un rayon de 5 km.")
+
+            with st.expander("Voir le détail des points (Score / 100)"):
+                st.dataframe(pd.DataFrame(resultat_score['details']), use_container_width=True)
+
+        elif not _lancer:
+            st.info("Sélectionnez une adresse pour lancer l'analyse automatiquement, ou utilisez le bouton 🔄 Relancer.")
 
     else:
         st.info("Veuillez sélectionner et confirmer une adresse dans la section 'Informations de l'immeuble' pour lancer l'analyse de localisation.")

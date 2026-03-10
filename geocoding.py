@@ -191,7 +191,7 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
     Retourne un dictionnaire avec une liste de services par catégorie.
     """
     query = f"""
-    [out:json][timeout:20];
+    [out:json][timeout:35];
     (
       node["highway"="bus_stop"](around:{rayon},{lat},{lon});
       node["railway"="station"](around:{rayon},{lat},{lon});
@@ -209,7 +209,7 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
       node["amenity"~"cinema|restaurant|fast_food|cafe|fuel"](around:{rayon},{lat},{lon});
       way["amenity"~"cinema|restaurant|fast_food|cafe|fuel"](around:{rayon},{lat},{lon});
     );
-    out center;
+    out center tags;
     """
     
     services = {
@@ -308,4 +308,121 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
         print(f"Erreur d'analyse proximite Overpass: {e}")
         
     return services
+
+
+
+def obtenir_loisirs_ville(ville: str, lat: float, lon: float) -> dict:
+    """
+    Compte les restaurants, loisirs et stations-service dans les limites EXACTES
+    de la municipalite via son relation-ID OSM (obtenu depuis Nominatim).
+    Fallback sur rayon 5 km si la relation OSM est introuvable.
+    """
+    headers = {"User-Agent": USER_AGENT}
+    urls_overpass = [
+        "https://overpass-api.de/api/interpreter",
+        "https://lz4.overpass-api.de/api/interpreter",
+        "https://overpass.kumi.systems/api/interpreter",
+    ]
+
+    # Etape 1 : obtenir l ID OSM de la municipalite via Nominatim
+    osm_area_id = None
+    methode = f"rayon 5 km autour de l adresse (limite OSM introuvable pour {ville})"
+
+    try:
+        r = requests.get(
+            "https://nominatim.openstreetmap.org/search",
+            params={
+                "q": f"{ville}, Quebec, Canada",
+                "format": "json",
+                "addressdetails": 1,
+                "limit": 5,
+                "featuretype": "city",
+            },
+            headers=headers,
+            timeout=8,
+        )
+        r.raise_for_status()
+        time.sleep(0.5)
+
+        for res in r.json():
+            osm_type = res.get("osm_type", "")
+            osm_id   = int(res.get("osm_id", 0))
+            addr     = res.get("address", {})
+            # Verifier que c est bien au Quebec et une relation (polygone)
+            if addr.get("state") in ("Quebec", "Québec") and osm_type == "relation" and osm_id > 0:
+                # Overpass area ID = relation ID + 3 600 000 000
+                osm_area_id = osm_id + 3_600_000_000
+                methode = f"limites municipales OSM ({ville})"
+                break
+    except Exception:
+        pass
+
+    # Etape 2 : requete Overpass dans le polygone exact
+    if osm_area_id:
+        query = f"""
+[out:json][timeout:40];
+area({osm_area_id})->.mun;
+(
+  node["amenity"~"restaurant|fast_food|cafe|bar|pub|food_court|ice_cream"](area.mun);
+  way["amenity"~"restaurant|fast_food|cafe|bar|pub|food_court|ice_cream"](area.mun);
+  node["amenity"="cinema"](area.mun);
+  node["leisure"~"sports_centre|ice_rink|swimming_pool|arena"](area.mun);
+  way["leisure"~"sports_centre|ice_rink|swimming_pool|arena"](area.mun);
+  node["amenity"="fuel"](area.mun);
+  way["amenity"="fuel"](area.mun);
+);
+out center tags;
+"""
+    else:
+        rayon = 5000
+        query = f"""
+[out:json][timeout:40];
+(
+  node["amenity"~"restaurant|fast_food|cafe|bar|pub|food_court|ice_cream"](around:{rayon},{lat},{lon});
+  way["amenity"~"restaurant|fast_food|cafe|bar|pub|food_court|ice_cream"](around:{rayon},{lat},{lon});
+  node["amenity"="cinema"](around:{rayon},{lat},{lon});
+  node["leisure"~"sports_centre|ice_rink|swimming_pool|arena"](around:{rayon},{lat},{lon});
+  way["leisure"~"sports_centre|ice_rink|swimming_pool|arena"](around:{rayon},{lat},{lon});
+  node["amenity"="fuel"](around:{rayon},{lat},{lon});
+  way["amenity"="fuel"](around:{rayon},{lat},{lon});
+);
+out center tags;
+"""
+
+    nb_restos = nb_loisirs = nb_essence = 0
+
+    for url in urls_overpass:
+        try:
+            resp = requests.post(url, data={"data": query}, timeout=45)
+            if resp.status_code == 200 and "application/json" in resp.headers.get("content-type", ""):
+                ids_vus = set()
+
+                for el in resp.json().get("elements", []):
+                    el_id   = el.get("id", 0)
+                    # Dédupliquer par ID OSM unique (évite node+way du même lieu)
+                    if el_id in ids_vus:
+                        continue
+                    ids_vus.add(el_id)
+
+                    tags    = el.get("tags", {})
+                    amenity = tags.get("amenity", "")
+                    leisure = tags.get("leisure", "")
+
+                    if amenity in ("restaurant", "fast_food", "cafe"):
+                        nb_restos += 1
+                    elif amenity == "cinema" or leisure in ("sports_centre", "ice_rink", "swimming_pool", "arena"):
+                        nb_loisirs += 1
+                    elif amenity == "fuel":
+                        nb_essence += 1
+                break  # succes
+        except Exception:
+            pass
+        time.sleep(0.5)
+
+    return {
+        "nb_restos":  nb_restos,
+        "nb_loisirs": nb_loisirs,
+        "nb_essence": nb_essence,
+        "methode":    methode,
+    }
 
