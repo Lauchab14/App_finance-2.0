@@ -142,21 +142,21 @@ from geocoding import _haversine
 
 def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: float = None, lon: float = None) -> dict:
     """
-    Calcule un score sur 100 basé sur les temps de transport ORS (60 pts),
-    le profil démographique (35 pts), et la proximité d'un grand centre (5 pts).
+    Calcule un score sur 100 basé sur les temps de transport locaux (55 pts),
+    le profil démographique (35 pts), et la proximité d'un grand centre (10 pts).
     """
     points = 0
     max_points = 100
     details = []
     
-    # 1. Analyse des trajets (60 points)
-    # Attribution: 12 pts max par service (5 services = 60 pts)
+    # 1. Analyse des trajets (55 points)
+    # Attribution: 11 pts max par service (5 services = 55 pts)
     bareme_trajet = {
-        "epicerie": 12,
-        "ecole": 12,
-        "pharmacie": 12,
-        "bus": 12,
-        "parc": 12
+        "epicerie": 11,
+        "ecole": 11,
+        "pharmacie": 11,
+        "bus": 11,
+        "parc": 11
     }
     
     score_trajets = 0
@@ -219,7 +219,7 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
 
     points += pts_revenu + pts_locataires + pts_croissance
 
-    # 3. Proximité grand centre (5 points)
+    # 3. Proximité grand centre (10 points)
     pts_ville = 0
     if lat and lon:
         grandes_villes = {
@@ -243,17 +243,17 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         distances.sort(key=lambda x: x[1])
         ville_proche, dist_min = distances[0]
         
-        if dist_min <= 15: pts_ville = 5
-        elif dist_min <= 30: pts_ville = 4
-        elif dist_min <= 50: pts_ville = 2
-        elif dist_min <= 80: pts_ville = 1
+        if dist_min <= 15: pts_ville = 10
+        elif dist_min <= 30: pts_ville = 8
+        elif dist_min <= 50: pts_ville = 5
+        elif dist_min <= 80: pts_ville = 2
         else: pts_ville = 0
         
-        details.append({"critere": f"Proximité centre économique ({ville_proche})", "points": pts_ville, "max": 5, "valeur": f"{dist_min} km"})
+        details.append({"critere": f"Proximité centre économique ({ville_proche})", "points": pts_ville, "max": 10, "valeur": f"{dist_min} km"})
     else:
         ville_proche = None
         dist_min = None
-        details.append({"critere": "Proximité centre économique", "points": 0, "max": 5, "valeur": "N/A"})
+        details.append({"critere": "Proximité centre économique", "points": 0, "max": 10, "valeur": "N/A"})
         
     points += pts_ville
     points = round(points, 1)
