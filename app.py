@@ -63,135 +63,268 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    /* Thème sombre premium */
+    /* =========================================
+       THÈME IMVEST - Dashboard Clair
+       Primaire : #002A54 (Bleu Marine)
+       Secondaire : #005A9C (Bleu Moyen)
+       Accent : #FFC000 (Or)
+       Fond : #F4F6F9 (Gris très clair)
+       Texte : #1E293B (Gris anthracite)
+       Cartes : #FFFFFF (Blanc)
+       ========================================= */
+
+    /* Forcer le thème clair sur l'application entière */
+    .stApp {
+        background-color: #F4F6F9;
+        color: #1E293B;
+    }
+
     .main .block-container {
-        padding-top: 1.5rem;
+        padding-top: 0rem !important;
         max-width: 1200px;
+    }
+
+    /* Annuler totalement le padding par défaut de Streamlit */
+    div[data-testid="stAppViewBlockContainer"] {
+        padding-top: 0.5rem !important; 
+    }
+
+    /* Cacher le header natif de Streamlit (la barre blanche avec le bouton "Deploy") qui prend de la place pour rien */
+    header[data-testid="stHeader"] {
+        display: none !important;
     }
 
     /* Carte métrique */
     .metric-card {
-        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-        border: 1px solid rgba(99, 110, 250, 0.3);
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
         border-radius: 12px;
         padding: 1.2rem;
         text-align: center;
         margin-bottom: 0.5rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
     }
     .metric-card h3 {
-        color: #a0a0b8;
+        color: #64748B;
         font-size: 0.85rem;
         margin: 0 0 0.3rem 0;
-        font-weight: 400;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
     }
     .metric-card .value {
         font-size: 1.6rem;
         font-weight: 700;
         margin: 0;
+        color: #002A54; /* Bleu Marine IMVEST */
     }
-    .metric-card .value.positive { color: #4ade80; }
-    .metric-card .value.negative { color: #f87171; }
-    .metric-card .value.neutral  { color: #636EFA; }
+    .metric-card .value.positive { color: #16A34A; } /* Vert plus lisible sur fond blanc */
+    .metric-card .value.negative { color: #DC2626; } /* Rouge plus lisible sur fond blanc */
+    .metric-card .value.neutral  { color: #005A9C; } /* Bleu moyen IMVEST */
 
     /* Ratio card */
     .ratio-card {
-        background: linear-gradient(135deg, #1e1e2e 0%, #2d2d44 100%);
-        border: 1px solid rgba(99, 110, 250, 0.2);
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
         border-radius: 12px;
         padding: 1.2rem;
         margin-bottom: 1rem;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+        border-left: 4px solid #FFC000; /* Accent Or IMVEST */
     }
     .ratio-card .ratio-name {
-        color: #c0c0d8;
+        color: #475569;
         font-size: 0.9rem;
-        font-weight: 600;
+        font-weight: 700;
         margin-bottom: 0.2rem;
+        text-transform: uppercase;
+        letter-spacing: 0.02em;
     }
     .ratio-card .ratio-value {
         font-size: 1.8rem;
-        font-weight: 700;
+        font-weight: 800;
         margin-bottom: 0.3rem;
+        color: #002A54;
     }
     .ratio-card .ratio-desc {
-        color: #8888a8;
+        color: #64748B;
         font-size: 0.78rem;
-        margin-bottom: 0.4rem;
+        margin-bottom: 0.6rem;
         font-style: italic;
     }
     .ratio-card .ratio-interp {
         font-size: 0.85rem;
         padding: 0.5rem 0.7rem;
-        border-radius: 8px;
-        background: rgba(0,0,0,0.2);
-        color: #d0d0e8; /* Fixed CSS for better readability on dark background */
+        border-radius: 6px;
+        background: #F1F5F9;
+        color: #334155;
+        border-left: 3px solid #005A9C;
     }
 
     /* Score localisation */
     .score-badge {
         display: inline-block;
-        font-size: 2.4rem;
+        font-size: 2.6rem;
         font-weight: 800;
-        padding: 0.5rem 1.2rem;
-        border-radius: 16px;
+        padding: 0.6rem 1.4rem;
+        border-radius: 12px;
         margin: 0.5rem 0;
+        box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1);
     }
-    .score-badge.high   { background: rgba(74, 222, 128, 0.15); color: #4ade80; border: 2px solid #4ade80; }
-    .score-badge.medium { background: rgba(250, 204, 21, 0.15); color: #facc15; border: 2px solid #facc15; }
-    .score-badge.low    { background: rgba(248, 113, 113, 0.15); color: #f87171; border: 2px solid #f87171; }
+    .score-badge.high   { background: #F0FDF4; color: #15803D; border: 2px solid #86EFAC; }
+    .score-badge.medium { background: #FEFCE8; color: #A16207; border: 2px solid #FDE047; }
+    .score-badge.low    { background: #FEF2F2; color: #B91C1C; border: 2px solid #FCA5A5; }
 
     /* Titre principal */
     .app-title {
         text-align: center;
-        padding: 0.5rem 0 1rem 0;
+        padding: 0.5rem 0 1.5rem 0;
     }
     .app-title h1 {
-        font-size: 1.8rem;
-        background: linear-gradient(90deg, #636EFA, #EE553B);
-        -webkit-background-clip: text;
-        -webkit-text-fill-color: transparent;
+        font-size: 2.2rem;
+        color: #002A54;
         margin: 0;
+        font-weight: 800;
+        letter-spacing: -0.02em;
     }
     .app-title p {
-        color: #8888a8;
-        font-size: 0.9rem;
-        margin: 0.2rem 0 0 0;
+        color: #64748B;
+        font-size: 1rem;
+        margin: 0.3rem 0 0 0;
+        font-weight: 500;
     }
 
     /* Sidebar info box */
     .info-box {
-        background: rgba(99, 110, 250, 0.1);
-        border: 1px solid rgba(99, 110, 250, 0.3);
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
         border-radius: 8px;
-        padding: 0.7rem;
-        font-size: 0.82rem;
-        color: #a0a0d0;
-        margin-top: 0.5rem;
+        padding: 0.8rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+        border-left: 3px solid #005A9C;
+    }
+    .info-box div {
+        color: #475569 !important;
+    }
+
+    /* Forcer le style des labels Streamlit (gris foncé au lieu de gris clair) */
+    .st-emotion-cache-10trblm, label {
+        color: #334155 !important;
+        font-weight: 600 !important;
+    }
+    /* =========================================
+       BOUTONS
+       ========================================= */
+    /* Boutons secondaires (Bleu Marine) */
+    .stButton > button {
+        background-color: #002A54 !important;
+        color: #FFFFFF !important;
+        border: none !important;
+        border-radius: 8px !important;
+        font-weight: 600 !important;
+        padding: 0.5rem 1rem !important;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
+        transition: all 0.2s ease;
+    }
+    .stButton > button:hover {
+        background-color: #004080 !important;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15) !important;
+    }
+    /* Bouton Principal (Or) - utiliser type="primary" dans st.button */
+    .stButton > button[data-testid="baseButton-primary"] {
+        background-color: #FFC000 !important;
+        color: #002A54 !important; /* Texte foncé sur or */
+    }
+    .stButton > button[data-testid="baseButton-primary"]:hover {
+        background-color: #FFD633 !important;
+    }
+
+    /* =========================================
+       SIDEBAR
+       ========================================= */
+    [data-testid="stSidebar"] {
+        background-color: #F8FAFC !important; /* Blanc bleuté très très clair */
+        border-right: 1px solid #E2E8F0 !important;
+    }
+
+    /* =========================================
+       EN-TÊTES DE SECTION CUSTOM
+       ========================================= */
+    .section-header {
+        margin-top: 2rem;
+        margin-bottom: 1.5rem;
+        padding-bottom: 0.5rem;
+        border-bottom: 2px solid #E2E8F0;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .section-header h2 {
+        font-size: 1.5rem;
+        color: #002A54;
+        margin: 0;
+        font-weight: 700;
+    }
+    .section-header .accent-line {
+        height: 4px;
+        width: 40px;
+        background-color: #FFC000;
+        border-radius: 2px;
+        margin-top: 0.25rem;
     }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+
 # =============================================================================
-# TITRE
+# HELPERS UI (DASHBOARD IMVEST)
 # =============================================================================
+def section_header(titre):
+    st.markdown(f'''
+    <div class="section-header">
+        <h2>{titre}</h2>
+        <div class="accent-line"></div>
+    </div>
+    ''', unsafe_allow_html=True)
+
+def custom_subheader(titre):
+    st.markdown(f'''
+    <div style="margin-top: 1.8rem; margin-bottom: 0.75rem; color: #002A54; font-weight: 700; font-size: 1.25rem; border-bottom: 1px solid #E2E8F0; padding-bottom: 0.4rem;">
+        {titre}
+    </div>
+    ''', unsafe_allow_html=True)
+
+# =============================================================================
+# TITRE ET LOGO
+# =============================================================================
+col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
+with col_logo2:
+    try:
+        st.image("imvest_logo.png", use_container_width=True)
+    except FileNotFoundError:
+        pass # Fallback silencieux si l'image manque
+
 st.markdown(
     """
-    <div class="app-title">
-        <h1>🏠 Analyseur de Rentabilité Immobilière</h1>
+    <div class="app-title" style="margin-top: 0.5rem; padding-top: 0;">
         <p>Analyse complète d'un immeuble à revenus — Québec</p>
     </div>
     """,
     unsafe_allow_html=True,
 )
 
+
 # =============================================================================
 # SIDEBAR — HYPOTHÈSES
 # =============================================================================
 with st.sidebar:
-    st.header("⚙️ Hypothèses")
+    section_header("⚙️ Hypothèses")
 
-    st.subheader("Hypothèque")
+    custom_subheader("Hypothèque")
     taux_interet = st.number_input(
         "Taux d'intérêt (%)", min_value=0.0, max_value=15.0,
         value=TAUX_INTERET_DEFAUT, step=0.25, format="%.2f",
@@ -211,7 +344,7 @@ with st.sidebar:
     )
 
     st.divider()
-    st.subheader("Projections")
+    custom_subheader("Projections")
     taux_vacance = st.number_input(
         "Taux de vacance (%)", min_value=0.0, max_value=30.0,
         value=TAUX_VACANCE_DEFAUT, step=1.0, format="%.1f",
@@ -255,7 +388,7 @@ if "derniere_adresse_analysee" not in st.session_state:
 # =============================================================================
 # SECTION 1 — INFORMATIONS DE L'IMMEUBLE
 # =============================================================================
-st.header("📋 Informations de l'immeuble")
+section_header("📋 Informations de l'immeuble")
 
 # ── Bloc adresse — pleine largeur ────────────────────────────────────────────
 st.markdown("#### 📍 Adresse de l'immeuble")
@@ -306,14 +439,16 @@ if st.session_state.adresse_choisie:
     region_auto = determiner_region_gps(lat, lon, ville)
     st.markdown(
         f"""
-        <div style="background:linear-gradient(135deg,rgba(99,110,250,0.12),rgba(99,110,250,0.04));
-                    border:1px solid rgba(99,110,250,0.35); border-radius:10px;
+        <div style="background:#FFFFFF;
+                    border:1px solid #E2E8F0; border-radius:12px;
+                    border-left:4px solid #002A54;
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
                     padding:0.8rem 1.1rem; margin-top:0.4rem; margin-bottom:0.8rem;">
-            <div style="font-size:0.72rem;color:#6b7280;margin-bottom:0.15rem; font-weight:500;">✅ Adresse confirmée</div>
-            <div style="font-size:0.97rem;font-weight:700;color:#1e1b4b;">{adresse}</div>
-            <div style="font-size:0.76rem;color:#374151;margin-top:0.25rem;">
-                📍 {ville} &nbsp;&middot;&nbsp; {region_auto.split('(')[0].strip()}
-                &nbsp;&middot;&nbsp; GPS : {lat:.5f}, {lon:.5f}
+            <div style="font-size:0.75rem;color:#005A9C;margin-bottom:0.15rem; font-weight:700; text-transform:uppercase; letter-spacing:0.02em;">✅ Adresse confirmée</div>
+            <div style="font-size:1.1rem;font-weight:800;color:#002A54;">{adresse}</div>
+            <div style="font-size:0.85rem;color:#475569;margin-top:0.35rem;">
+                📍 {ville} &nbsp;&middot;&nbsp; <span style="color:#D4AF37; font-weight:600;">{region_auto.split('(')[0].strip()}</span>
+                &nbsp;&middot;&nbsp; <span style="color:#94A3B8; font-size:0.75rem;">GPS : {lat:.5f}, {lon:.5f}</span>
             </div>
         </div>
         """,
@@ -323,7 +458,7 @@ if st.session_state.adresse_choisie:
 st.divider()
 
 # ── Autres informations (deux colonnes) ──────────────────────────────────────
-col1, col2 = st.columns(2)
+col1, col2 = st.columns(2, gap="large")
 with col1:
 
     # Taux municipal calculé en arrière-plan selon la ville détectée
@@ -347,8 +482,8 @@ with col2:
     )
 
 # --- LOYERS : Total ou Détaillé ---
-st.subheader("💰 Revenus de loyers")
-col_l1, col_l2 = st.columns(2)
+custom_subheader("💰 Revenus de loyers")
+col_l1, col_l2 = st.columns(2, gap="large")
 with col_l1:
     mode_loyer = st.radio(
         "Mode de saisie des loyers",
@@ -389,13 +524,13 @@ else:
 # =============================================================================
 # SECTION 2 — TAXES (Saisie Manuelle ou Automatique)
 # =============================================================================
-st.header("🏛️ Taxes (annuelles)")
+section_header("🏛️ Taxes (annuelles)")
 taxes_mode = st.radio("Mode de saisie des taxes", ["Automatique (selon évaluation)", "Saisie manuelle"], horizontal=True)
 
 taxes_muni_auto = calculer_taxes_municipales(evaluation_municipale, taux_municipal)
 taxes_scol_auto = calculer_taxes_scolaires(evaluation_municipale)
 
-col_t1, col_t2 = st.columns(2)
+col_t1, col_t2 = st.columns(2, gap="large")
 with col_t1:
     taxes_municipales_man = st.number_input(
         "Taxes municipales ($)", min_value=0.0, value=float(taxes_muni_auto),
@@ -417,7 +552,7 @@ else:
 # =============================================================================
 # SECTION 3 — DÉPENSES
 # =============================================================================
-st.header("📊 Dépenses annuelles (opérationnelles)")
+section_header("📊 Dépenses annuelles (opérationnelles)")
 
 # Estimations par défaut basées sur le prix
 est_ass = max(1000, int(prix_achat * ESTIMATION_ASSURANCE_PCT))
@@ -426,7 +561,7 @@ est_tonte = ESTIMATION_TONTE
 est_deneige = ESTIMATION_DENEIGEMENT
 est_elec = ESTIMATION_ELECTRICITE
 
-col_d1, col_d2, col_d3 = st.columns(3)
+col_d1, col_d2, col_d3 = st.columns(3, gap="large")
 with col_d1:
     assurance = st.number_input("Assurance ($)", min_value=0, value=est_ass, step=100, format="%d")
     electricite = st.number_input("Électricité ($)", min_value=0, value=est_elec, step=100, format="%d", help="Chauffage, communs. Souvent 0 si payé par locataires.")
@@ -442,8 +577,8 @@ autres_depenses = st.number_input("Autres dépenses (ex: permis, concierge) ($)"
 # =============================================================================
 # SECTION 4 — FRAIS D'ACQUISITION
 # =============================================================================
-st.header("🏷️ Frais d'acquisition (année 1 non récurrents)")
-col_f1, col_f2, col_f3 = st.columns(3)
+section_header("🏷️ Frais d'acquisition (année 1 non récurrents)")
+col_f1, col_f2, col_f3 = st.columns(3, gap="large")
 
 with col_f1:
     frais_notaire = st.number_input(
@@ -530,10 +665,10 @@ tab1, tab2, tab3, tab4 = st.tabs(
 # TAB 1 — ANALYSE ANNÉE 1
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    st.subheader("Résumé financier — Année 1")
+    custom_subheader("Résumé financier — Année 1")
 
     # Métriques clés
-    m1, m2, m3, m4 = st.columns(4)
+    m1, m2, m3, m4 = st.columns(4, gap="large")
 
     def metric_html(titre, valeur, classe="neutral"):
         return (
@@ -554,17 +689,17 @@ with tab1:
 
     st.divider()
 
-    col_rev, col_dep, col_non_rec = st.columns(3)
+    col_rev, col_dep, col_non_rec = st.columns(3, gap="large")
 
     with col_rev:
-        st.subheader("🟩 Revenus")
+        custom_subheader("🟩 Revenus")
         st.write(f"Loyers bruts marginaux : **{resultats['revenus_bruts_annuels']:,.0f}$**")
         st.write(f"- Vacance ({taux_vacance:.1f}%) : **-{resultats['revenus_bruts_annuels'] - resultats['revenus_nets']:,.0f}$**")
         st.divider()
         st.write(f"**Revenus nets : {resultats['revenus_nets']:,.0f}$**")
 
     with col_dep:
-        st.subheader("🟥 Dépenses annuelles")
+        custom_subheader("🟥 Dépenses annuelles")
         st.write(f"Taxes municipales : **{resultats['taxes_municipales']:,.0f}$**")
         st.write(f"Taxes scolaires : **{resultats['taxes_scolaires']:,.0f}$**")
         st.write(f"Assurance : **{assurance:,.0f}$**")
@@ -581,7 +716,7 @@ with tab1:
         st.write(f"**Total dépenses OPEX : {resultats['depenses_totales']:,.0f}$**")
 
     with col_non_rec:
-        st.subheader("🟧 Frais Non-Récurrents")
+        custom_subheader("🟧 Frais Non-Récurrents")
         st.write(f"Droits mutation : **{resultats['droits_mutation']:,.0f}$**")
         st.write(f"Notaire : **{frais_notaire:,.0f}$**")
         st.write(f"Inspection : **{frais_inspection:,.0f}$**")
@@ -591,7 +726,7 @@ with tab1:
 
     # Graphique donut des dépenses
     st.divider()
-    st.subheader("Répartition des dépenses annuelles")
+    custom_subheader("Répartition des dépenses annuelles")
 
     dep_labels = ["Taxes munic.", "Taxes scol.", "Assurance", "Tonte", "Déneigement", "Entretien", "Hypothèque (intérêts)"]
     dep_values = [
@@ -638,8 +773,8 @@ with tab1:
 
     # Frais d'acquisition
     st.divider()
-    st.subheader("Frais d'acquisition (non récurrents)")
-    fa1, fa2, fa3, fa4, fa5 = st.columns(5)
+    custom_subheader("Frais d'acquisition (non récurrents)")
+    fa1, fa2, fa3, fa4, fa5 = st.columns(5, gap="large")
     with fa1:
         st.metric("Droits de mutation", f"{resultats['droits_mutation']:,.0f}$")
     with fa2:
@@ -655,7 +790,7 @@ with tab1:
 # TAB 2 — PROJECTION 10 ANS
 # ─────────────────────────────────────────────────────────────────────────────
 with tab2:
-    st.subheader("Projection sur 10 ans")
+    custom_subheader("Projection sur 10 ans")
 
     df_proj = pd.DataFrame(projection["annees"])
 
@@ -691,7 +826,7 @@ with tab2:
     st.divider()
 
     # Graphiques
-    g1, g2 = st.columns(2)
+    g1, g2 = st.columns(2, gap="large")
 
     with g1:
         fig_cf = go.Figure()
@@ -767,7 +902,7 @@ with tab2:
 # TAB 3 — LOCALISATION
 # ─────────────────────────────────────────────────────────────────────────────
 with tab3:
-    st.subheader("📍 Analyse de localisation détaillée")
+    custom_subheader("📍 Analyse de localisation détaillée")
 
     if "adresse_choisie" in st.session_state and st.session_state.adresse_choisie:
         _lat = st.session_state.adresse_choisie["lat"]
@@ -780,7 +915,7 @@ with tab3:
         # Lancement automatique si nouvelle adresse sélectionnée, ou bouton manuel
         _lancer = st.session_state.get("analyse_locale_auto", False)
 
-        col_btn1, col_btn2 = st.columns([3, 1])
+        col_btn1, col_btn2 = st.columns([3, 1], gap="large")
         with col_btn1:
             if st.button("🔄 Relancer l'analyse", help="Relancer manuellement l'analyse de localisation"):
                 _lancer = True
@@ -850,7 +985,7 @@ with tab3:
             resultat_score  = st.session_state.loc_score
 
             # Carte
-            st.subheader("🗺️ Carte Interactive — Immeuble & Services Proches")
+            custom_subheader("🗺️ Carte Interactive — Immeuble & Services Proches")
             st.caption("🏠 Rouge : immeuble | 🟢 Vert : épiceries | 🔵 Bleu : écoles | 🟣 Violet : pharmacies | 🟠 Orange : transport | 🌲 Vert foncé : parcs")
             st_folium(st.session_state.loc_carte, use_container_width=True, height=500, returned_objects=[])
 
@@ -871,7 +1006,7 @@ with tab3:
 
             # Démographie
             st.markdown("### 🏘️ Synthèse Démographique")
-            col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
+            col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5, gap="large")
             with col_d1:
                 val_pop = stats_demo.get('population')
                 st.metric("Population", f"{val_pop:,}".replace(',', ' ') if val_pop else "N/D")
@@ -893,7 +1028,7 @@ with tab3:
 
             # Loisirs & Commodités
             st.markdown(f"### 🍔 Loisirs & Commodités — {_ville_loisirs}")
-            col_c1, col_c2, col_c3 = st.columns(3)
+            col_c1, col_c2, col_c3 = st.columns(3, gap="large")
             with col_c1:
                 st.metric("Restaurants & Fast-Foods", f"{loisirs_ville['nb_restos']:,}".replace(",", " "))
             with col_c2:
@@ -945,7 +1080,7 @@ with tab3:
 # TAB 4 — RATIOS & RECOMMANDATION
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
-    st.subheader("🎯 Ratios financiers")
+    custom_subheader("🎯 Ratios financiers")
 
     ratio_keys = [
         ("cap_rate", "%"),
@@ -958,7 +1093,7 @@ with tab4:
 
     # Afficher en grille 2×3
     for row_start in range(0, len(ratio_keys), 2):
-        cols = st.columns(2)
+        cols = st.columns(2, gap="large")
         for j, (cle, unite) in enumerate(ratio_keys[row_start : row_start + 2]):
             valeur = ratios.get(cle)
             if valeur is None:
@@ -1004,14 +1139,14 @@ with tab4:
 
     # Recommandation
     st.divider()
-    st.subheader("📝 Recommandation")
+    custom_subheader("📝 Recommandation")
     recommandation = generer_recommandation(ratios, prix_achat)
     st.markdown(recommandation)
 
     # Résumé des loyers si détaillé
     if loyers_details:
         st.divider()
-        st.subheader("🏘️ Détail des loyers")
+        custom_subheader("🏘️ Détail des loyers")
         
         freq_label = "Loyer mensuel" if frequence_loyer == "Mensuel" else "Loyer annuel"
         _total = loyers_mensuels_total if frequence_loyer == "Mensuel" else (loyers_mensuels_total * 12)
