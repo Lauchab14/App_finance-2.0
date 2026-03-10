@@ -818,7 +818,7 @@ with tab3:
                 
                 # --- LOISIRS & COMMODITÉS (COMPTEURS) ---
                 st.markdown("### 🍔 Loisirs & Commodités (Rayon de 5 km)")
-                col_c1, col_c2, col_c3, col_c4 = st.columns(4)
+                col_c1, col_c2, col_c3 = st.columns(3)
                 
                 with col_c1:
                     nb_restos = len(tous_services.get("restaurant", []))
@@ -829,17 +829,6 @@ with tab3:
                 with col_c3:
                     nb_essence = len(tous_services.get("essence", []))
                     st.metric("Stations-service", f"{nb_essence}")
-                with col_c4:
-                    top_villes = resultat_score.get("top_villes")
-                    if top_villes:
-                        v_main, d_main = top_villes[0]
-                        st.metric(f"📍 {v_main} (et +)", f"{d_main} km")
-                        
-                        # Afficher les 2 autres villes en-dessous
-                        autres = [f"{v} ({d}km)" for v, d in top_villes[1:]]
-                        st.caption(f"_{' / '.join(autres)}_")
-                    else:
-                        st.metric("Grand Centre", "N/A")
                     
                 st.caption("*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.)*")
 
@@ -848,6 +837,16 @@ with tab3:
                 # --- TOUS LES SERVICES ---
                 st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
                 
+                # Grand centre métrique déplacé au début des services
+                top_villes = resultat_score.get("top_villes")
+                if top_villes:
+                    v_main, d_main = top_villes[0]
+                    st.success(f"**Centre économique le plus proche :** {v_main} à {d_main} km")
+                    autres = [f"{v} ({d} km)" for v, d in top_villes[1:]]
+                    if autres:
+                        st.caption(f"*(Autres pôles à proximité : {' / '.join(autres)})*")
+                        
+                st.write("") # espacement
                 titres_cat = {
                     "epicerie": "🛒 Épiceries & Supermarchés",
                     "ecole": "🏫 Écoles & Institutions",
