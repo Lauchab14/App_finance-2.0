@@ -791,22 +791,28 @@ with tab3:
                 
                 # --- DÉMOGRAPHIE ---
                 st.markdown("### 🏘️ Synthèse Démographique")
-                col_demo1, col_demo2, col_demo3, col_demo4 = st.columns(4)
+                col_d1, col_d2, col_d3, col_d4, col_d5 = st.columns(5)
                 
-                with col_demo1:
+                with col_d1:
+                    val_pop = stats_demo.get('population')
+                    st.metric("Population", f"{val_pop:,}".replace(',', ' ') if val_pop else "N/D")
+                with col_d2:
+                    val_age = stats_demo.get('age_median')
+                    st.metric("Âge Médian", f"{val_age} ans" if val_age else "N/D")
+                with col_d3:
                     val_loc = stats_demo.get('locataires_pct')
                     st.metric("Locataires", f"{val_loc}%" if val_loc else "N/D")
-                with col_demo2:
+                with col_d4:
                     val_rev = stats_demo.get('revenu_median')
-                    st.metric("Revenu Médian", f"{val_rev:,.0f} $".replace(',', ' ') if val_rev else "N/D")
-                with col_demo3:
+                    st.metric("Revenu Médian", f"{val_rev:,} $".replace(',', ' ') if val_rev else "N/D")
+                with col_d5:
                     val_croissance = stats_demo.get('croissance_pop')
-                    st.metric("Croissance", f"{val_croissance}%" if val_croissance is not None else "N/D")
-                with col_demo4:
-                    ville_a = stats_demo.get('ville_analyse')
-                    st.metric("Municipalité", ville_a if ville_a else "N/D")
+                    delta_color = "normal"
+                    st.metric("Croissance (5 ans)", f"{val_croissance}%" if val_croissance is not None else "N/D",
+                             delta=f"{val_croissance}%" if val_croissance is not None else None)
                     
-                st.caption(f"_{stats_demo.get('source', '')}_ — {stats_demo.get('nb_appartements', 0)} apparts, {stats_demo.get('nb_maisons', 0)} maisons dans 1km")
+                ville_a = stats_demo.get('ville_analyse', '')
+                st.caption(f"📊 _{stats_demo.get('source', '')}_")
 
                 st.divider()
                 

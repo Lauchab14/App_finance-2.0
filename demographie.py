@@ -1,184 +1,161 @@
 """
-demographie.py — Analyse démographique personnalisée par adresse
-Calcule des estimations uniques pour chaque coordonnée en analysant
-la topologie locale des bâtiments via OpenStreetMap.
+demographie.py — Analyse démographique basée sur les données du Recensement 2021
+Utilise OpenNorth pour identifier la municipalité, puis cherche les
+données réelles dans donnees_recensement.csv.
 """
 import requests
-import time
+import csv
+import os
 from typing import Dict
+from difflib import get_close_matches
+
+# Charger la base de données du recensement au démarrage
+_RECENSEMENT = {}
+_CSV_PATH = os.path.join(os.path.dirname(__file__), "donnees_recensement.csv")
+
+def _charger_recensement():
+    """Charge le fichier CSV du recensement en mémoire."""
+    global _RECENSEMENT
+    if _RECENSEMENT:
+        return  # Déjà chargé
+    
+    try:
+        with open(_CSV_PATH, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                nom = row['nom_csd'].strip()
+                _RECENSEMENT[nom.lower()] = {
+                    'nom': nom,
+                    'population_2021': int(row['population_2021']),
+                    'population_2016': int(row['population_2016']),
+                    'age_median': float(row['age_median']),
+                    'revenu_median': int(row['revenu_median_menage']),
+                    'locataires_pct': float(row['pct_locataires']),
+                }
+    except Exception as e:
+        print(f"Erreur chargement recensement: {e}")
+
+
+def _trouver_municipalite(nom_recherche: str) -> Dict:
+    """
+    Trouve la municipalité la plus proche dans la base de données.
+    Utilise la correspondance floue pour gérer les variations de noms.
+    """
+    _charger_recensement()
+    
+    if not nom_recherche:
+        return None
+    
+    nom = nom_recherche.lower().strip()
+    
+    # 1. Correspondance exacte
+    if nom in _RECENSEMENT:
+        return _RECENSEMENT[nom]
+    
+    # 2. Vérifier si le nom est contenu dans une entrée (ex: "Sainte-Marie" dans "Ville de Sainte-Marie")
+    for cle, data in _RECENSEMENT.items():
+        if nom in cle or cle in nom:
+            return data
+    
+    # 3. Correspondance floue (seuil de 60%)
+    noms_disponibles = list(_RECENSEMENT.keys())
+    matches = get_close_matches(nom, noms_disponibles, n=1, cutoff=0.6)
+    if matches:
+        return _RECENSEMENT[matches[0]]
+    
+    # 4. Essayer sans les préfixes communs
+    prefixes = ["ville de ", "municipalité de ", "municipalite de ", "paroisse de ", "canton de "]
+    for prefix in prefixes:
+        if nom.startswith(prefix):
+            nom_court = nom[len(prefix):]
+            if nom_court in _RECENSEMENT:
+                return _RECENSEMENT[nom_court]
+            matches = get_close_matches(nom_court, noms_disponibles, n=1, cutoff=0.6)
+            if matches:
+                return _RECENSEMENT[matches[0]]
+    
+    return None
+
 
 def analyser_demographie(lat: float, lon: float, region: str) -> Dict[str, any]:
     """
-    Génère un profil démographique UNIQUE pour chaque adresse en analysant
-    les bâtiments réels autour des coordonnées via OpenStreetMap.
+    Génère un profil démographique pour une adresse donnée.
     
-    Au lieu de catégories génériques (Rurale, Urbaine, etc.), cette fonction
-    compte les types de bâtiments dans un rayon de 1km et en déduit :
-    - La proportion de locataires (via ratio appartements / maisons)
-    - Le revenu médian estimé (via densité et type de quartier)
-    - La croissance de population (via densité de constructions neuves)
+    Étape 1: Identifier la municipalité via OpenNorth (coordonnées GPS → nom CSD)
+    Étape 2: Chercher les données réelles du Recensement 2021 dans notre base CSV
+    Étape 3: Calculer la croissance et retourner les résultats
     """
     resultats = {
         "population": None,
         "croissance_pop": None,
         "revenu_median": None,
         "locataires_pct": None,
-        "densite_batiments": None,
-        "nb_appartements": 0,
-        "nb_maisons": 0,
-        "nb_commerces": 0,
+        "age_median": None,
         "trouve": False,
-        "source": "Analyse topologique locale (OpenStreetMap)",
+        "source": "Aucune donnée trouvée",
         "ville_analyse": None
     }
     
     # ──────────────────────────────────────────────────────────────
-    # 1. Identifier la municipalité via OpenNorth (optionnel)
+    # 1. Identifier la municipalité via OpenNorth
     # ──────────────────────────────────────────────────────────────
+    nom_csd = None
     try:
         url_on = f"https://represent.opennorth.ca/boundaries/?contains={lat},{lon}&sets=census-subdivisions"
         r_on = requests.get(url_on, timeout=5)
         if r_on.status_code == 200 and r_on.json().get('objects'):
-            resultats["ville_analyse"] = r_on.json()['objects'][0]['name']
-            resultats["trouve"] = True
-    except:
-        pass
-
-    # ──────────────────────────────────────────────────────────────
-    # 2. Compter les bâtiments par type dans un rayon de 1km
-    #    C'est ce qui rend l'analyse UNIQUE par adresse
-    # ──────────────────────────────────────────────────────────────
-    query_batiments = f"""
-    [out:json][timeout:15];
-    (
-      way["building"="apartments"](around:1000,{lat},{lon});
-      way["building"="residential"](around:1000,{lat},{lon});
-      way["building"="house"](around:1000,{lat},{lon});
-      way["building"="detached"](around:1000,{lat},{lon});
-      way["building"="semidetached_house"](around:1000,{lat},{lon});
-      way["building"="terrace"](around:1000,{lat},{lon});
-      way["building"="commercial"](around:1000,{lat},{lon});
-      way["building"="retail"](around:1000,{lat},{lon});
-      way["building"="yes"](around:1000,{lat},{lon});
-      node["building"="apartments"](around:1000,{lat},{lon});
-      node["building"="house"](around:1000,{lat},{lon});
-    );
-    out tags;
-    """
-
-    nb_appts = 0
-    nb_maisons = 0
-    nb_residentiels = 0
-    nb_commerces = 0
-    nb_total = 0
-
-    try:
-        url_overpass = "https://overpass-api.de/api/interpreter"
-        for tentative in range(2):
-            r_osm = requests.post(url_overpass, data={"data": query_batiments}, timeout=20)
-            if r_osm.status_code == 200 and 'application/json' in r_osm.headers.get('content-type', ''):
-                break
-            time.sleep(3)
-        
-        if r_osm.status_code == 200 and 'application/json' in r_osm.headers.get('content-type', ''):
-            data = r_osm.json()
-            for el in data.get("elements", []):
-                tags = el.get("tags", {})
-                building_type = tags.get("building", "")
-                nb_total += 1
-
-                if building_type == "apartments":
-                    nb_appts += 1
-                elif building_type in ["house", "detached", "semidetached_house"]:
-                    nb_maisons += 1
-                elif building_type == "terrace":
-                    nb_appts += 1  # Maisons en rangée = souvent locatif
-                elif building_type in ["commercial", "retail"]:
-                    nb_commerces += 1
-                elif building_type == "residential":
-                    nb_residentiels += 1
-                elif building_type == "yes":
-                    nb_residentiels += 1  # Type inconnu, compté comme résidentiel générique
+            nom_csd = r_on.json()['objects'][0]['name']
+            resultats["ville_analyse"] = nom_csd
     except Exception as e:
-        print(f"Erreur requête bâtiments Overpass: {e}")
-
-    # Répartir les "residential" et "yes" proportionnellement
-    if nb_appts + nb_maisons > 0:
-        ratio_known = nb_appts / (nb_appts + nb_maisons)
-    else:
-        ratio_known = 0.3  # Défaut modéré si aucun tag spécifique
-    
-    nb_appts += int(nb_residentiels * ratio_known)
-    nb_maisons += int(nb_residentiels * (1 - ratio_known))
-    
-    total_habitations = nb_appts + nb_maisons
-    
-    resultats["nb_appartements"] = nb_appts
-    resultats["nb_maisons"] = nb_maisons
-    resultats["nb_commerces"] = nb_commerces
-    resultats["densite_batiments"] = nb_total
+        print(f"Erreur OpenNorth: {e}")
 
     # ──────────────────────────────────────────────────────────────
-    # 3. Calculer les estimations démographiques à partir des données réelles
+    # 2. Chercher dans notre base de données du Recensement
     # ──────────────────────────────────────────────────────────────
+    donnees = _trouver_municipalite(nom_csd) if nom_csd else None
     
-    if total_habitations > 0:
-        ratio_appts = nb_appts / total_habitations
+    if donnees:
+        resultats["trouve"] = True
+        resultats["population"] = donnees['population_2021']
+        resultats["age_median"] = donnees['age_median']
+        resultats["revenu_median"] = donnees['revenu_median']
+        resultats["locataires_pct"] = donnees['locataires_pct']
         
-        # --- Proportion de locataires ---
-        # Plus il y a d'appartements, plus la proportion de locataires est élevée.
-        # Formule: Base de 15% (minimum QC) + ajustement selon ratio d'appartements
-        # Un quartier 100% appartements ≈ 75-85% locataires
-        # Un quartier 100% maisons ≈ 15-25% locataires
-        locataires_pct = 15.0 + (ratio_appts * 65.0)
+        # Calculer la croissance démographique réelle (2016 → 2021)
+        pop_2016 = donnees['population_2016']
+        pop_2021 = donnees['population_2021']
+        if pop_2016 > 0:
+            croissance = round(((pop_2021 - pop_2016) / pop_2016) * 100, 1)
+            resultats["croissance_pop"] = croissance
         
-        # Ajustement selon la densité totale (plus dense = plus urbain = plus de locataires)
-        if nb_total > 200:
-            locataires_pct += 5.0  # Très dense
-        elif nb_total > 100:
-            locataires_pct += 2.0  # Dense
-        
-        resultats["locataires_pct"] = round(min(85.0, max(10.0, locataires_pct)), 1)
-        
-        # --- Revenu médian ---
-        # Au Québec: zones très denses en appartements = revenus modérés (~55-65k)
-        # Banlieue mixte = revenus plus élevés (~70-85k)
-        # Quartier résidentiel unifamilial = revenus élevés (~75-90k)
-        if ratio_appts > 0.7:
-            # Quartier très locatif (centre-ville, quartiers populaires)
-            revenu = 52000 + min(nb_commerces * 200, 15000)
-        elif ratio_appts > 0.3:
-            # Quartier mixte / banlieue
-            revenu = 68000 + min(nb_commerces * 150, 12000)
-        else:
-            # Quartier résidentiel unifamilial
-            revenu = 78000 + min(nb_commerces * 100, 10000)
-        
-        resultats["revenu_median"] = min(95000, max(45000, int(revenu)))
-        
-        # --- Croissance de la population ---
-        # Heuristique: Plus il y a de bâtiments, plus la zone est développée
-        # Les zones avec beaucoup de constructions = croissance positive
-        if nb_total > 300:
-            croissance = 4.5  # Très dense, urbain en croissance
-        elif nb_total > 150:
-            croissance = 3.0
-        elif nb_total > 50:
-            croissance = 1.5
-        elif nb_total > 20:
-            croissance = 0.5
-        else:
-            croissance = -0.5  # Très peu de bâtiments = zone stagnante
-        
-        resultats["croissance_pop"] = croissance
-        
-        resultats["source"] = f"Analyse locale: {nb_appts} apparts, {nb_maisons} maisons, {nb_commerces} commerces dans 1km"
-    
+        resultats["source"] = f"Recensement Canada 2021 — {donnees['nom']}"
+        resultats["ville_analyse"] = donnees['nom']
     else:
-        # Aucun bâtiment trouvé — zone très rurale ou données manquantes
-        resultats["locataires_pct"] = 18.0
-        resultats["revenu_median"] = 58000
-        resultats["croissance_pop"] = -1.0
-        resultats["source"] = "Données OSM limitées — estimations rurales par défaut"
+        # Aucune donnée trouvée — utiliser des estimations par défaut selon la région
+        if "Métropolitaine" in region:
+            resultats["locataires_pct"] = 55.0
+            resultats["revenu_median"] = 65000
+            resultats["age_median"] = 40.0
+            resultats["croissance_pop"] = 3.0
+        elif "Urbaine" in region:
+            resultats["locataires_pct"] = 42.0
+            resultats["revenu_median"] = 72000
+            resultats["age_median"] = 42.0
+            resultats["croissance_pop"] = 3.5
+        elif "Semi-urbaine" in region:
+            resultats["locataires_pct"] = 32.0
+            resultats["revenu_median"] = 66000
+            resultats["age_median"] = 43.0
+            resultats["croissance_pop"] = 1.5
+        else:
+            resultats["locataires_pct"] = 25.0
+            resultats["revenu_median"] = 62000
+            resultats["age_median"] = 45.0
+            resultats["croissance_pop"] = 0.5
+        
+        ville_label = nom_csd if nom_csd else "Inconnu"
+        resultats["source"] = f"Estimations régionales ({region}) — {ville_label} non trouvé dans le recensement"
+        if nom_csd:
+            resultats["ville_analyse"] = nom_csd
     
     return resultats
