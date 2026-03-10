@@ -837,16 +837,24 @@ with tab3:
                 # --- TOUS LES SERVICES ---
                 st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
                 
-                # Grand centre métrique déplacé au début des services
+                # --- GRANDES VILLES ---
+                st.markdown("### 🏢 Grandes villes les plus proches")
+                
                 top_villes = resultat_score.get("top_villes")
                 if top_villes:
                     v_main, d_main = top_villes[0]
-                    st.success(f"**Centre économique le plus proche :** {v_main} à {d_main} km")
-                    autres = [f"{v} ({d} km)" for v, d in top_villes[1:]]
-                    if autres:
-                        st.caption(f"*(Autres pôles à proximité : {' / '.join(autres)})*")
-                        
-                st.write("") # espacement
+                    st.write(f"**1.** {v_main} à {d_main} km")
+                    
+                    autres = [f"**{i+2}.** {v} à {d} km" for i, (v, d) in enumerate(top_villes[1:])]
+                    for autre in autres:
+                        st.write(autre)
+                else:
+                    st.write("Aucune grande ville trouvée.")
+                
+                st.divider()
+                
+                # --- TOUS LES SERVICES ---
+                st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
                 titres_cat = {
                     "epicerie": "🛒 Épiceries & Supermarchés",
                     "ecole": "🏫 Écoles & Institutions",
