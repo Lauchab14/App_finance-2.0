@@ -740,7 +740,7 @@ with tab3:
         _adresse = st.session_state.adresse_choisie.get("display_name", "")
         _region = determiner_region_gps(_lat, _lon, st.session_state.adresse_choisie.get("ville", "Inconnu"))
         
-        st.write(f"**Coordonnées :** {_lat:.4f}, {_lon:.4f} — **Région :** {_region}")
+        
 
         if st.button("🚀 Lancer l'Analyse Avancée (Services & Démographie)", type="primary"):
             with st.spinner("Analyse de l'emplacement en cours (peut prendre 10-20 secondes)..."):
