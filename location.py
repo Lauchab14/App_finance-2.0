@@ -138,10 +138,12 @@ def creer_graphique_radar(details: list, region: str) -> go.Figure:
     return fig
 
 
-def calculer_score_localisation_avance(trajets: dict, stats_demo: dict) -> dict:
+from geocoding import _haversine
+
+def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: float = None, lon: float = None) -> dict:
     """
-    Calcule un score sur 100 basé sur les temps de transport ORS (60 pts) 
-    et le profil démographique (40 pts).
+    Calcule un score sur 100 basé sur les temps de transport ORS (60 pts),
+    le profil démographique (35 pts), et la proximité d'un grand centre (5 pts).
     """
     points = 0
     max_points = 100
@@ -175,19 +177,19 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict) -> dict:
             
     points += score_trajets
     
-    # 2. Analyse démographique (40 points)
-    # Revenu médian (15 pts)
+    # 2. Analyse démographique (35 points)
+    # Revenu médian (10 pts)
     pts_revenu = 0
     rev = stats_demo.get("revenu_median")
     if rev:
-        if rev > 90000: pts_revenu = 15
-        elif rev > 75000: pts_revenu = 12
-        elif rev > 60000: pts_revenu = 8
-        elif rev > 45000: pts_revenu = 4
+        if rev > 90000: pts_revenu = 10
+        elif rev > 75000: pts_revenu = 8
+        elif rev > 60000: pts_revenu = 5
+        elif rev > 45000: pts_revenu = 2
         else: pts_revenu = 0
-        details.append({"critere": "Revenu médian", "points": pts_revenu, "max": 15, "valeur": f"{rev:,.0f} $".replace(',', ' ')})
+        details.append({"critere": "Revenu médian", "points": pts_revenu, "max": 10, "valeur": f"{rev:,.0f} $".replace(',', ' ')})
     else:
-        details.append({"critere": "Revenu médian", "points": 0, "max": 15, "valeur": "Inconnu"})
+        details.append({"critere": "Revenu médian", "points": 0, "max": 10, "valeur": "Inconnu"})
         
     # Proportion de locataires (15 pts) - indique la demande locative
     pts_locataires = 0
@@ -216,6 +218,42 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict) -> dict:
         details.append({"critere": "Croissance population", "points": 0, "max": 10, "valeur": "Inconnu"})
 
     points += pts_revenu + pts_locataires + pts_croissance
+
+    # 3. Proximité grand centre (5 points)
+    pts_ville = 0
+    if lat and lon:
+        grandes_villes = {
+            "Montréal": (45.5017, -73.5673),
+            "Québec": (46.8139, -71.2080),
+            "Lévis": (46.8021, -71.1753),
+            "Sherbrooke": (45.4010, -71.8991),
+            "Trois-Rivières": (46.3432, -72.5426),
+            "Gatineau": (45.4287, -75.7134),
+            "Saint-Georges": (46.1219, -70.6700),
+            "Saguenay": (48.4275, -71.0635),
+            "Drummondville": (45.8812, -72.4862)
+        }
+        
+        distances = []
+        for ville, (v_lat, v_lon) in grandes_villes.items():
+            dist = _haversine(lat, lon, v_lat, v_lon)
+            distances.append((ville, dist))
+        
+        # Trouver la ville la plus proche
+        distances.sort(key=lambda x: x[1])
+        ville_proche, dist_min = distances[0]
+        
+        if dist_min <= 15: pts_ville = 5
+        elif dist_min <= 30: pts_ville = 4
+        elif dist_min <= 50: pts_ville = 2
+        elif dist_min <= 80: pts_ville = 1
+        else: pts_ville = 0
+        
+        details.append({"critere": f"Proximité centre économique ({ville_proche})", "points": pts_ville, "max": 5, "valeur": f"{dist_min} km"})
+    else:
+        details.append({"critere": "Proximité centre économique", "points": 0, "max": 5, "valeur": "N/A"})
+        
+    points += pts_ville
     points = round(points, 1)
 
     # 3. Résumé

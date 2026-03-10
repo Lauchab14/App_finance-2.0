@@ -768,7 +768,7 @@ with tab3:
                     else:
                         trajets_proches[cat] = None
                 
-                resultat_score = calculer_score_localisation_avance(trajets_proches, stats_demo)
+                resultat_score = calculer_score_localisation_avance(trajets_proches, stats_demo, lat=_lat, lon=_lon)
 
                 st.markdown("---")
                 
