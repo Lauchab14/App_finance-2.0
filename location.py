@@ -251,6 +251,8 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         
         details.append({"critere": f"Proximité centre économique ({ville_proche})", "points": pts_ville, "max": 5, "valeur": f"{dist_min} km"})
     else:
+        ville_proche = None
+        dist_min = None
         details.append({"critere": "Proximité centre économique", "points": 0, "max": 5, "valeur": "N/A"})
         
     points += pts_ville
@@ -270,5 +272,7 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         "score_total": points,
         "max_score": max_points,
         "details": details,
-        "resume": resume
+        "resume": resume,
+        "ville_proche": ville_proche,
+        "dist_ville": dist_min
     }

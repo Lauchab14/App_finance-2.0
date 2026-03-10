@@ -818,7 +818,7 @@ with tab3:
                 
                 # --- LOISIRS & COMMODITÉS (COMPTEURS) ---
                 st.markdown("### 🍔 Loisirs & Commodités (Rayon de 5 km)")
-                col_c1, col_c2, col_c3 = st.columns(3)
+                col_c1, col_c2, col_c3, col_c4 = st.columns(4)
                 
                 with col_c1:
                     nb_restos = len(tous_services.get("restaurant", []))
@@ -829,6 +829,13 @@ with tab3:
                 with col_c3:
                     nb_essence = len(tous_services.get("essence", []))
                     st.metric("Stations-service", f"{nb_essence}")
+                with col_c4:
+                    ville_proche = resultat_score.get("ville_proche")
+                    dist_ville = resultat_score.get("dist_ville")
+                    if ville_proche and dist_ville is not None:
+                        st.metric(f"Grand Centre ({ville_proche})", f"{dist_ville} km")
+                    else:
+                        st.metric("Grand Centre", "N/A")
                     
                 st.caption("*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.)*")
 
