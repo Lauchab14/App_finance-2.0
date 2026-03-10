@@ -202,8 +202,12 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
       node["amenity"="pharmacy"](around:{rayon},{lat},{lon});
       node["shop"="chemist"](around:{rayon},{lat},{lon});
       way["amenity"="pharmacy"](around:{rayon},{lat},{lon});
-      node["leisure"~"park|playground|garden"](around:{rayon},{lat},{lon});
-      way["leisure"~"park|playground|garden"](around:{rayon},{lat},{lon});
+      node["healthcare"="pharmacy"](around:{rayon},{lat},{lon});
+      way["healthcare"="pharmacy"](around:{rayon},{lat},{lon});
+      node["leisure"~"park|playground|garden|sports_centre|ice_rink|swimming_pool|pitch"](around:{rayon},{lat},{lon});
+      way["leisure"~"park|playground|garden|sports_centre|ice_rink|swimming_pool|pitch"](around:{rayon},{lat},{lon});
+      node["amenity"~"cinema|restaurant|fast_food|cafe|fuel"](around:{rayon},{lat},{lon});
+      way["amenity"~"cinema|restaurant|fast_food|cafe|fuel"](around:{rayon},{lat},{lon});
     );
     out center;
     """
@@ -213,7 +217,10 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
         "ecole": [],
         "pharmacie": [],
         "bus": [],
-        "parc": []
+        "parc": [],
+        "loisir": [],
+        "restaurant": [],
+        "essence": []
     }
     
     try:
@@ -254,18 +261,27 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
             if tags.get("highway") == "bus_stop" or tags.get("railway") == "station":
                 info["nom"] = nom or "Arrêt de bus"
                 services["bus"].append(info)
-            if tags.get("amenity") in ["school", "college", "kindergarten", "university"]:
+            elif tags.get("amenity") in ["school", "college", "kindergarten", "university"]:
                 info["nom"] = nom or "École"
                 services["ecole"].append(info)
-            if tags.get("shop") in ["supermarket", "convenience", "greengrocer"]:
+            elif tags.get("shop") in ["supermarket", "convenience", "greengrocer"]:
                 info["nom"] = nom or "Épicerie"
                 services["epicerie"].append(info)
-            if tags.get("amenity") == "pharmacy" or tags.get("shop") == "chemist":
+            elif tags.get("amenity") == "pharmacy" or tags.get("shop") == "chemist" or tags.get("healthcare") == "pharmacy":
                 info["nom"] = nom or "Pharmacie"
                 services["pharmacie"].append(info)
-            if tags.get("leisure") in ["park", "playground", "garden"]:
+            elif tags.get("leisure") in ["park", "playground", "garden"]:
                 info["nom"] = nom or "Parc"
                 services["parc"].append(info)
+            elif tags.get("amenity") == "cinema" or tags.get("leisure") in ["sports_centre", "ice_rink", "swimming_pool", "pitch"]:
+                info["nom"] = nom or "Loisir / Centre sportif"
+                services["loisir"].append(info)
+            elif tags.get("amenity") in ["restaurant", "fast_food", "cafe"]:
+                info["nom"] = nom or "Restaurant / Café"
+                services["restaurant"].append(info)
+            elif tags.get("amenity") == "fuel":
+                info["nom"] = nom or "Station-service"
+                services["essence"].append(info)
         
         # Trier chaque catégorie par distance et dédupliquer par nom
         for cat in services:

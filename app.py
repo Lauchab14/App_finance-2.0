@@ -816,6 +816,24 @@ with tab3:
 
                 st.divider()
                 
+                # --- LOISIRS & COMMODITÉS (COMPTEURS) ---
+                st.markdown("### 🍔 Loisirs & Commodités (Rayon de 5 km)")
+                col_c1, col_c2, col_c3 = st.columns(3)
+                
+                with col_c1:
+                    nb_restos = len(tous_services.get("restaurant", []))
+                    st.metric("Restaurants & Fast-Foods", f"{nb_restos}")
+                with col_c2:
+                    nb_loisirs = len(tous_services.get("loisir", []))
+                    st.metric("Centres de loisirs & Sports", f"{nb_loisirs}")
+                with col_c3:
+                    nb_essence = len(tous_services.get("essence", []))
+                    st.metric("Stations-service", f"{nb_essence}")
+                    
+                st.caption("*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.)*")
+
+                st.divider()
+                
                 # --- TOUS LES SERVICES ---
                 st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
                 
