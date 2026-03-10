@@ -833,10 +833,6 @@ with tab3:
                 st.caption("*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.)*")
 
                 st.divider()
-                
-                # --- TOUS LES SERVICES ---
-                st.markdown("### 📍 Services à Proximité (Rayon de 5 km)")
-                
                 # --- GRANDES VILLES ---
                 st.markdown("### 🏢 Grandes villes les plus proches")
                 
