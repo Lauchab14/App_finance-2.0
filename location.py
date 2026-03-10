@@ -221,17 +221,33 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
 
     # 3. Proximité grand centre (10 points)
     pts_ville = 0
+    top_villes = None
     if lat and lon:
         grandes_villes = {
             "Montréal": (45.5017, -73.5673),
             "Québec": (46.8139, -71.2080),
-            "Lévis": (46.8021, -71.1753),
-            "Sherbrooke": (45.4010, -71.8991),
-            "Trois-Rivières": (46.3432, -72.5426),
+            "Laval": (45.5828, -73.7561),
             "Gatineau": (45.4287, -75.7134),
-            "Saint-Georges": (46.1219, -70.6700),
+            "Longueuil": (45.5306, -73.5136),
+            "Sherbrooke": (45.4010, -71.8991),
+            "Lévis": (46.8021, -71.1753),
             "Saguenay": (48.4275, -71.0635),
-            "Drummondville": (45.8812, -72.4862)
+            "Trois-Rivières": (46.3432, -72.5426),
+            "Terrebonne": (45.6922, -73.6335),
+            "Saint-Jean-sur-Richelieu": (45.3056, -73.2533),
+            "Repentigny": (45.7408, -73.4497),
+            "Brossard": (45.4601, -73.4526),
+            "Drummondville": (45.8812, -72.4862),
+            "Saint-Jérôme": (45.7729, -74.0016),
+            "Granby": (45.4000, -72.7333),
+            "Saint-Hyacinthe": (45.6262, -72.9567),
+            "Rimouski": (48.4488, -68.5239),
+            "Shawinigan": (46.5667, -72.7500),
+            "Joliette": (46.0167, -73.4333),
+            "Victoriaville": (46.0500, -71.9667),
+            "Saint-Georges": (46.1219, -70.6700),
+            "Rouyn-Noranda": (48.2333, -79.0167),
+            "Salaberry-de-Valleyfield": (45.2500, -74.1333)
         }
         
         distances = []
@@ -239,9 +255,11 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
             dist = _haversine(lat, lon, v_lat, v_lon)
             distances.append((ville, dist))
         
-        # Trouver la ville la plus proche
+        # Trouver les 3 villes les plus proches
         distances.sort(key=lambda x: x[1])
-        ville_proche, dist_min = distances[0]
+        top_villes = distances[:3]
+        
+        ville_principale, dist_min = top_villes[0]
         
         if dist_min <= 15: pts_ville = 10
         elif dist_min <= 30: pts_ville = 8
@@ -249,11 +267,10 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         elif dist_min <= 80: pts_ville = 2
         else: pts_ville = 0
         
-        details.append({"critere": f"Proximité centre économique ({ville_proche})", "points": pts_ville, "max": 10, "valeur": f"{dist_min} km"})
+        villes_str = " / ".join([f"{v} ({d} km)" for v, d in top_villes])
+        details.append({"critere": f"Proximité centres ({ville_principale})", "points": pts_ville, "max": 10, "valeur": villes_str})
     else:
-        ville_proche = None
-        dist_min = None
-        details.append({"critere": "Proximité centre économique", "points": 0, "max": 10, "valeur": "N/A"})
+        details.append({"critere": "Proximité centres économiques", "points": 0, "max": 10, "valeur": "N/A"})
         
     points += pts_ville
     points = round(points, 1)
@@ -273,6 +290,5 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         "max_score": max_points,
         "details": details,
         "resume": resume,
-        "ville_proche": ville_proche,
-        "dist_ville": dist_min
+        "top_villes": top_villes
     }

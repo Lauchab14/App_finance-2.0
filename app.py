@@ -830,10 +830,14 @@ with tab3:
                     nb_essence = len(tous_services.get("essence", []))
                     st.metric("Stations-service", f"{nb_essence}")
                 with col_c4:
-                    ville_proche = resultat_score.get("ville_proche")
-                    dist_ville = resultat_score.get("dist_ville")
-                    if ville_proche and dist_ville is not None:
-                        st.metric(f"Grand Centre ({ville_proche})", f"{dist_ville} km")
+                    top_villes = resultat_score.get("top_villes")
+                    if top_villes:
+                        v_main, d_main = top_villes[0]
+                        st.metric(f"📍 {v_main} (et +)", f"{d_main} km")
+                        
+                        # Afficher les 2 autres villes en-dessous
+                        autres = [f"{v} ({d}km)" for v, d in top_villes[1:]]
+                        st.caption(f"_{' / '.join(autres)}_")
                     else:
                         st.metric("Grand Centre", "N/A")
                     
