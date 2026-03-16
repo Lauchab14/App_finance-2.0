@@ -1201,7 +1201,7 @@ resultats["taxes_scolaires"] = taxes_scolaires_finales
 resultats["depenses_totales"] = (taxes_municipales_finales + taxes_scolaires_finales + assurance + entretien_autre + tonte + deneigement + electricite + gestion + autres_depenses)
 resultats["rne"] = resultats["revenus_nets"] - resultats["depenses_totales"]
 resultats["cashflow_avant_frais"] = resultats["rne"] - resultats["paiement_annuel"]
-resultats["cashflow_net_annee1"] = resultats["cashflow_avant_frais"] - resultats["frais_acquisition"]
+resultats["cashflow_net_annee1"] = resultats["cashflow_avant_frais"]
 
 projection = projeter_10_ans(
     prix_achat=prix_achat,
@@ -1466,70 +1466,142 @@ with tab2:
     custom_subheader("Projection sur 10 ans")
 
     df_proj = pd.DataFrame(projection["annees"])
+    investissement_initial = projection.get(
+        "investissement_initial",
+        resultats["mise_de_fonds"] + resultats["frais_acquisition"],
+    )
+    produit_vente_an10 = float(df_proj["produit_vente_estime"].iloc[-1]) if not df_proj.empty else 0.0
+
+    st.markdown(
+        f"""
+        <div class="info-box">
+            <div><strong>Annee 0 :</strong> mise de fonds {format_money(resultats["mise_de_fonds"])} + frais d'acquisition {format_money(resultats["frais_acquisition"])} = <strong>{format_money(investissement_initial)}</strong></div>
+            <div style="margin-top:0.35rem;"><strong>Annee 10 :</strong> le produit de vente estime suppose une revente a la valeur projetee, moins le solde du pret, sans impot de disposition.</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    def projection_money(value, blank_zero=False):
+        if blank_zero and abs(value) < 0.005:
+            return "—"
+        return format_money(value)
+
+    projection_rows = [
+        {
+            "Annee": "0",
+            "Mise de fonds": resultats["mise_de_fonds"],
+            "Frais d'acquisition": resultats["frais_acquisition"],
+            "RNE": 0.0,
+            "Interets": 0.0,
+            "Capital rembourse": 0.0,
+            "Cash flow avant impot": 0.0,
+            "Impot estime": 0.0,
+            "Cash flow apres impot": 0.0,
+            "Produit de vente estime": 0.0,
+            "Flux total (TRI)": -investissement_initial,
+        }
+    ]
+
+    for row in projection["annees"]:
+        projection_rows.append(
+            {
+                "Annee": str(int(row["annee"])),
+                "Mise de fonds": 0.0,
+                "Frais d'acquisition": 0.0,
+                "RNE": row["rne"],
+                "Interets": row["interet"],
+                "Capital rembourse": row["capital"],
+                "Cash flow avant impot": row["cashflow_avant_impot"],
+                "Impot estime": row["impot"],
+                "Cash flow apres impot": row["cashflow_apres_impot"],
+                "Produit de vente estime": row["produit_vente_estime"],
+                "Flux total (TRI)": row["flux_total_tri"],
+            }
+        )
+
+    df_projection = pd.DataFrame(projection_rows)
+    projection_money_columns = [col for col in df_projection.columns if col != "Annee"]
+    df_projection_display = df_projection.copy()
+    for col in projection_money_columns:
+        df_projection_display[col] = df_projection_display[col].apply(
+            lambda value: projection_money(value, blank_zero=(col != "Flux total (TRI)"))
+        )
+
+    def color_projection(val):
+        if not isinstance(val, str) or "$" not in val:
+            return ""
+        clean_val = val.replace(" ", "").replace("$", "").replace(",", "")
+        try:
+            numeric_val = float(clean_val)
+        except ValueError:
+            return ""
+        if numeric_val > 0:
+            return "color: #166534; font-weight: 700;"
+        if numeric_val < 0:
+            return "color: #B91C1C; font-weight: 700;"
+        return ""
 
     # Tableau avec style Streamlit (background color rendering is clearer)
-    df_affichage = df_proj.copy()
+    df_affichage = df_projection_display.copy()
     df_affichage.columns = [
-        "Année", "Revenus nets", "Dépenses", "RNE", "Frais Non Rec.", "Hypothèque",
-        "Intérêts", "Capital", "Cashflow Av. Impôt", "Rev. Imposable", "Impôt", "Cashflow Net", "Cashflow cumulé",
-        "Valeur immeuble", "Solde prêt", "Équité",
+        "Annee",
+        "Mise de fonds",
+        "Frais d'acquisition",
+        "RNE",
+        "Interets",
+        "Capital rembourse",
+        "Cash flow avant impot",
+        "Impot estime",
+        "Cash flow apres impot",
+        "Produit de vente estime",
+        "Flux total (TRI)",
     ]
-    colonnes_dollars = df_affichage.columns[1:]
-    for col in colonnes_dollars:
-        df_affichage[col] = df_affichage[col].apply(lambda x: f"{x:,.0f} $")
 
-    def color_cashflow(val):
-        """Couleur pour le texte des colonnes Cashflow"""
-        if isinstance(val, str) and "$" in val:
-            clean_val = val.replace(" ", "").replace("$", "").replace(",", "")
-            try:
-                numeric_val = float(clean_val)
-                if numeric_val > 0:
-                    return 'color: #4ade80' # Vert
-                elif numeric_val < 0:
-                    return 'color: #f87171' # Rouge
-            except:
-                pass
-        return ''
-
-    styled_df = df_affichage.style.applymap(color_cashflow, subset=['Cashflow Av. Impôt', 'Cashflow Net'])
+    styled_df = df_affichage.style.applymap(
+        color_projection,
+        subset=["Cash flow avant impot", "Cash flow apres impot", "Flux total (TRI)"],
+    )
 
     st.dataframe(styled_df, use_container_width=True, hide_index=True)
 
     st.divider()
 
-    # Graphiques
     g1, g2 = st.columns(2, gap="large")
 
     with g1:
-        fig_cf = go.Figure()
-        fig_cf.add_trace(
+        fig_flux = go.Figure()
+        fig_flux.add_trace(
+            go.Bar(
+                x=df_proj["annee"],
+                y=df_proj["cashflow_avant_impot"],
+                name="Avant impot",
+                marker_color="#94A3B8",
+                hovertemplate="Annee %{x}<br>Avant impot: %{y:,.0f}$<extra></extra>",
+            )
+        )
+        fig_flux.add_trace(
             go.Bar(
                 x=df_proj["annee"],
                 y=df_proj["cashflow_apres_impot"],
-                name="Cashflow annuel net (après impôt)",
-                marker_color=["#4ade80" if v >= 0 else "#f87171" for v in df_proj["cashflow_apres_impot"]],
+                name="Apres impot",
+                marker_color=["#16A34A" if v >= 0 else "#DC2626" for v in df_proj["cashflow_apres_impot"]],
+                hovertemplate="Annee %{x}<br>Apres impot: %{y:,.0f}$<extra></extra>",
             )
         )
-        fig_cf.add_trace(
-            go.Scatter(
-                x=df_proj["annee"],
-                y=df_proj["cashflow_cumule"],
-                name="Cumulé",
-                line=dict(color="#636EFA", width=3),
-            )
-        )
-        fig_cf.update_layout(
-            title="Cashflow annuel et cumulé",
-            xaxis_title="Année",
+        fig_flux.update_layout(
+            title="Cash flow annuel",
+            barmode="group",
+            xaxis_title="Annee",
             yaxis_title="$",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="white"),
-            height=400,
+            font=dict(color="#334155"),
+            height=390,
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            yaxis=dict(gridcolor="rgba(148, 163, 184, 0.22)"),
         )
-        st.plotly_chart(fig_cf, use_container_width=True)
+        st.plotly_chart(fig_flux, use_container_width=True)
 
     with g2:
         fig_val = go.Figure()
@@ -1537,39 +1609,64 @@ with tab2:
             go.Scatter(
                 x=df_proj["annee"],
                 y=df_proj["valeur_immeuble"],
-                name="Valeur",
-                line=dict(color="#636EFA", width=3),
+                name="Valeur projetee",
+                line=dict(color="#005A9C", width=3),
                 fill="tozeroy",
-                fillcolor="rgba(99, 110, 250, 0.1)",
-            )
-        )
-        fig_val.add_trace(
-            go.Scatter(
-                x=df_proj["annee"],
-                y=df_proj["solde_pret"],
-                name="Solde prêt",
-                line=dict(color="#EE553B", width=3),
+                fillcolor="rgba(0, 90, 156, 0.10)",
+                hovertemplate="Annee %{x}<br>Valeur: %{y:,.0f}$<extra></extra>",
             )
         )
         fig_val.add_trace(
             go.Scatter(
                 x=df_proj["annee"],
                 y=df_proj["equite"],
-                name="Équité",
-                line=dict(color="#4ade80", width=3, dash="dash"),
+                name="Produit de vente estime",
+                line=dict(color="#F59E0B", width=3),
+                hovertemplate="Annee %{x}<br>Produit estime: %{y:,.0f}$<extra></extra>",
             )
         )
+        fig_val.add_annotation(
+            x=int(df_proj["annee"].iloc[-1]),
+            y=float(df_proj["equite"].iloc[-1]),
+            text=f"Annee 10<br>{format_money(produit_vente_an10)}",
+            showarrow=True,
+            arrowhead=2,
+            arrowsize=1,
+            arrowcolor="#F59E0B",
+            bgcolor="#FFFFFF",
+            bordercolor="#FCD34D",
+            font=dict(color="#92400E", size=12),
+        )
         fig_val.update_layout(
-            title="Valeur, prêt et équité",
-            xaxis_title="Année",
+            title="Valeur et produit de vente estime",
+            xaxis_title="Annee",
             yaxis_title="$",
             paper_bgcolor="rgba(0,0,0,0)",
             plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(color="white"),
-            height=400,
+            font=dict(color="#334155"),
+            height=390,
             legend=dict(orientation="h", yanchor="bottom", y=1.02),
+            yaxis=dict(gridcolor="rgba(148, 163, 184, 0.22)"),
         )
         st.plotly_chart(fig_val, use_container_width=True)
+
+    st.divider()
+    custom_subheader("Amortissement du pret")
+
+    df_amort = df_proj[
+        ["annee", "solde_debut", "paiement_hypo", "interet", "capital", "solde_pret"]
+    ].copy()
+    df_amort.columns = [
+        "Annee",
+        "Solde debut",
+        "Paiement annuel",
+        "Interets",
+        "Capital rembourse",
+        "Solde fin",
+    ]
+    for col in df_amort.columns[1:]:
+        df_amort[col] = df_amort[col].apply(format_money)
+    st.dataframe(df_amort, use_container_width=True, hide_index=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — LOCALISATION

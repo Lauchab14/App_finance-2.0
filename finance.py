@@ -117,7 +117,7 @@ def analyser_annee1(
 
     # --- Cashflow ---
     cashflow_avant_frais = rne - paiement_annuel
-    cashflow_net_annee1 = cashflow_avant_frais - frais_acquisition
+    cashflow_net_annee1 = cashflow_avant_frais
 
     # --- Intérêts vs capital année 1 ---
     taux_mensuel = taux_interet / 100 / 12
@@ -180,14 +180,14 @@ def projeter_10_ans(
     taux_mensuel = taux_interet / 100 / 12
     solde_pret = montant_pret
     valeur_immeuble = prix_achat
+    investissement_initial = mise_de_fonds + frais_acquisition
 
     annees = []
-    cashflows_irr = [-(mise_de_fonds + frais_acquisition)]  # investissement initial
+    cashflows_irr = [-investissement_initial]
 
     revenus = revenus_nets_an1
     depenses = depenses_an1
-    paiement_annuel = paiement_mensuel * 12
-    cashflow_cumule = 0.0
+    cashflow_cumule = -investissement_initial
 
     for annee in range(1, 11):
         if annee > 1:
@@ -195,35 +195,39 @@ def projeter_10_ans(
             depenses *= 1 + inflation_depenses / 100
 
         rne = revenus - depenses
+        solde_debut = solde_pret
 
         # Amortissement du prêt cette année
         interet_annuel = 0.0
         capital_annuel = 0.0
         for _ in range(12):
+            if solde_pret <= 0:
+                solde_pret = 0.0
+                break
+
             interet_mois = solde_pret * taux_mensuel
-            capital_mois = paiement_mensuel - interet_mois
+            capital_mois = min(max(0.0, paiement_mensuel - interet_mois), solde_pret)
             interet_annuel += interet_mois
             capital_annuel += capital_mois
             solde_pret -= capital_mois
 
-        cashflow_avant = rne - paiement_annuel
+        paiement_annuel = interet_annuel + capital_annuel
+        cashflow_avant_impot = rne - paiement_annuel
         
-        # --- Impôt et non récurrents ---
-        frais_non_recurrents_annee = frais_acquisition if annee == 1 else 0.0
-        cashflow_net_avant_impot = cashflow_avant - frais_non_recurrents_annee
+        # Les intérêts sont déductibles, mais pas le capital remboursé.
+        cashflow_net_avant_impot = cashflow_avant_impot
 
-        # Revenu imposable = Revenus nets - dépenses récurrentes - intérêts - frais non récurrents (année 1)
-        # Ne tient pas compte de l'amortissement comptable du bâtiment pour simplifier
-        revenu_imposable = revenus - depenses - interet_annuel - frais_non_recurrents_annee
+        # Simplification fiscale : pas d'amortissement comptable ni d'économie
+        # d'impôt si le revenu imposable devient négatif.
+        revenu_imposable = revenus - depenses - interet_annuel
         impot_a_payer = max(0.0, revenu_imposable * (taux_marginal_impot / 100))
-        # Note: si revenu imposable négatif, crée une perte déductible ailleurs, on pourrait 
-        # ajouter la récupération d'impôt (remboursement) si on assume des autres revenus :
-        # impot = revenu_imposable * (taux_marginal_impot / 100)
         
         cashflow_net_apres_impot = cashflow_net_avant_impot - impot_a_payer
-        cashflow_cumule += cashflow_net_apres_impot
 
         valeur_immeuble *= 1 + appreciation / 100
+        produit_vente_estime = max(0.0, valeur_immeuble - solde_pret) if annee == 10 else 0.0
+        flux_total_tri = cashflow_net_apres_impot + produit_vente_estime
+        cashflow_cumule += flux_total_tri
         equite = valeur_immeuble - solde_pret
 
         annees.append(
@@ -232,7 +236,6 @@ def projeter_10_ans(
                 "revenus_nets": round(revenus, 2),
                 "depenses": round(depenses, 2),
                 "rne": round(rne, 2),
-                "frais_non_recurrents": round(frais_non_recurrents_annee, 2),
                 "paiement_hypo": round(paiement_annuel, 2),
                 "interet": round(interet_annuel, 2),
                 "capital": round(capital_annuel, 2),
@@ -240,21 +243,23 @@ def projeter_10_ans(
                 "revenu_imposable": round(revenu_imposable, 2),
                 "impot": round(impot_a_payer, 2),
                 "cashflow_apres_impot": round(cashflow_net_apres_impot, 2),
+                "produit_vente_estime": round(produit_vente_estime, 2),
+                "flux_total_tri": round(flux_total_tri, 2),
                 "cashflow_cumule": round(cashflow_cumule, 2),
                 "valeur_immeuble": round(valeur_immeuble, 2),
+                "solde_debut": round(solde_debut, 2),
                 "solde_pret": round(solde_pret, 2),
                 "equite": round(equite, 2),
             }
         )
 
-        # Pour le TRI : cashflow net après impôt de l'année (+ valeur nette de vente si dernière année)
-        if annee < 10:
-            cashflows_irr.append(cashflow_net_apres_impot)
-        else:
-            # Dernière année : inclusion de la vente (simplifiée sans impôt sur gain en capital pour le TRI de base)
-            cashflows_irr.append(cashflow_net_apres_impot + valeur_immeuble - solde_pret)
+        cashflows_irr.append(flux_total_tri)
 
-    return {"annees": annees, "cashflows_irr": cashflows_irr}
+    return {
+        "annees": annees,
+        "cashflows_irr": cashflows_irr,
+        "investissement_initial": round(investissement_initial, 2),
+    }
 
 
 # =============================================================================
