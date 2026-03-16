@@ -7,6 +7,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
+from html import escape
 
 from config import (
     AMORTISSEMENT_DEFAUT,
@@ -161,6 +162,56 @@ st.markdown(
         border-left: 3px solid #005A9C;
     }
 
+    .decision-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+        border: 1px solid #E2E8F0;
+        border-radius: 16px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        min-height: 100%;
+    }
+    .decision-card.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .decision-card.warning {
+        border-top: 4px solid #D97706;
+    }
+    .decision-card.negative {
+        border-top: 4px solid #DC2626;
+    }
+    .decision-card.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .decision-card .label {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .decision-card .value {
+        font-size: 1.8rem;
+        line-height: 1.1;
+        font-weight: 900;
+        color: #002A54;
+        margin-bottom: 0.45rem;
+    }
+    .decision-card.positive .value {
+        color: #166534;
+    }
+    .decision-card.warning .value {
+        color: #B45309;
+    }
+    .decision-card.negative .value {
+        color: #B91C1C;
+    }
+    .decision-card .note {
+        font-size: 0.84rem;
+        color: #475569;
+        line-height: 1.35;
+    }
+
     /* Score localisation */
     .score-badge {
         display: inline-block;
@@ -242,6 +293,74 @@ st.markdown(
     }
 
     /* =========================================
+       ONGLETS
+       ========================================= */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 0.55rem;
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        background: transparent;
+    }
+    .stTabs [data-baseweb="tab-highlight"] {
+        display: none;
+    }
+    .stTabs [data-baseweb="tab-border"] {
+        display: none;
+    }
+    .stTabs [data-baseweb="tab"] {
+        width: 100%;
+        margin: 0 !important;
+        padding: 0.72rem 0.8rem !important;
+        min-height: 60px;
+        border-radius: 16px 16px 0 0 !important;
+        border: 1px solid #D8E2EE !important;
+        border-bottom: 3px solid #D8E2EE !important;
+        background: #FFFFFF !important;
+        color: #35506E !important;
+        font-size: 0.92rem !important;
+        font-weight: 700 !important;
+        line-height: 1.2 !important;
+        text-align: center !important;
+        justify-content: center !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.05);
+        transition: all 0.2s ease;
+    }
+    .stTabs [data-baseweb="tab"]:hover {
+        border-color: #AFC3D9 !important;
+        background: #F8FBFF !important;
+        transform: translateY(-1px);
+    }
+    .stTabs [data-baseweb="tab"][aria-selected="true"] {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F3F8FD 100%) !important;
+        color: #002A54 !important;
+        border-color: #8FB0CF !important;
+        border-bottom-color: #005A9C !important;
+        box-shadow: 0 10px 22px rgba(0, 42, 84, 0.10);
+    }
+    .stTabs [data-baseweb="tab"] p {
+        font-size: 0.9rem !important;
+        font-weight: 700 !important;
+        margin: 0 !important;
+        white-space: normal !important;
+        overflow-wrap: anywhere;
+    }
+    @media (max-width: 900px) {
+        .stTabs [data-baseweb="tab-list"] {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+    }
+    @media (max-width: 560px) {
+        .stTabs [data-baseweb="tab-list"] {
+            grid-template-columns: 1fr;
+        }
+        .stTabs [data-baseweb="tab"] {
+            min-height: 54px;
+            border-radius: 14px !important;
+        }
+    }
+
+    /* =========================================
        SIDEBAR
        ========================================= */
     [data-testid="stSidebar"] {
@@ -274,6 +393,268 @@ st.markdown(
         border-radius: 2px;
         margin-top: 0.25rem;
     }
+
+    /* Etat des resultats */
+    .statement-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+        border: 1px solid #E2E8F0;
+        border-radius: 16px;
+        padding: 1.1rem 1.15rem 1rem 1.15rem;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+        min-height: 100%;
+    }
+    .statement-card + .statement-card {
+        margin-top: 1rem;
+    }
+    .statement-card.income {
+        border-top: 5px solid #16A34A;
+    }
+    .statement-card.opex {
+        border-top: 5px solid #E11D48;
+    }
+    .statement-card.nonrec {
+        border-top: 5px solid #F97316;
+    }
+    .statement-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.75rem;
+        margin-bottom: 0.9rem;
+    }
+    .statement-kicker {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.15rem;
+    }
+    .statement-title {
+        font-size: 1.35rem;
+        font-weight: 800;
+        color: #0F172A;
+        line-height: 1.1;
+    }
+    .statement-pill {
+        padding: 0.35rem 0.65rem;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    .statement-pill.income {
+        background: #DCFCE7;
+        color: #166534;
+    }
+    .statement-pill.opex {
+        background: #FFE4E6;
+        color: #9F1239;
+    }
+    .statement-pill.nonrec {
+        background: #FFEDD5;
+        color: #9A3412;
+    }
+    .statement-amount {
+        font-size: 2rem;
+        font-weight: 800;
+        color: #002A54;
+        margin-bottom: 0.2rem;
+    }
+    .statement-caption {
+        color: #64748B;
+        font-size: 0.8rem;
+        margin-bottom: 0.85rem;
+    }
+    .statement-lines {
+        border-top: 1px solid #E2E8F0;
+        margin-top: 0.85rem;
+        padding-top: 0.75rem;
+    }
+    .statement-line {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        padding: 0.46rem 0;
+        border-bottom: 1px dashed #E2E8F0;
+        color: #334155;
+    }
+    .statement-line:last-child {
+        border-bottom: none;
+    }
+    .statement-line .label {
+        color: #475569;
+    }
+    .statement-line .value {
+        font-weight: 700;
+        color: #0F172A;
+        white-space: nowrap;
+    }
+    .statement-line.negative .value {
+        color: #B91C1C;
+    }
+    .statement-line.total {
+        margin-top: 0.55rem;
+        padding-top: 0.8rem;
+        border-top: 2px solid #CBD5E1;
+        border-bottom: none;
+    }
+    .statement-line.total .label,
+    .statement-line.total .value {
+        font-size: 1.05rem;
+        font-weight: 800;
+        color: #002A54;
+    }
+
+    .autofinance-box {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+        border: 1px solid #D8E2EE;
+        border-radius: 18px;
+        padding: 1.15rem 1.2rem;
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+    }
+    .autofinance-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 0.9rem;
+    }
+    .autofinance-title {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #0F172A;
+        margin-bottom: 0.2rem;
+    }
+    .autofinance-subtitle {
+        font-size: 0.85rem;
+        color: #64748B;
+    }
+    .autofinance-badge {
+        padding: 0.4rem 0.8rem;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .autofinance-badge.positive {
+        background: #DCFCE7;
+        color: #166534;
+    }
+    .autofinance-badge.negative {
+        background: #FFE4E6;
+        color: #9F1239;
+    }
+    .autofinance-steps {
+        margin-top: 0.8rem;
+        border-top: 1px solid #E2E8F0;
+        padding-top: 0.8rem;
+    }
+    .autofinance-step {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        padding: 0.55rem 0;
+        border-bottom: 1px dashed #E2E8F0;
+    }
+    .autofinance-step:last-child {
+        border-bottom: none;
+    }
+    .autofinance-step .label {
+        color: #475569;
+    }
+    .autofinance-step .value {
+        font-weight: 700;
+        color: #0F172A;
+        white-space: nowrap;
+    }
+    .autofinance-step.minus .value {
+        color: #B91C1C;
+    }
+    .autofinance-step.total {
+        margin-top: 0.45rem;
+        padding: 0.9rem 1rem;
+        border-top: 2px solid #CBD5E1;
+        border-radius: 14px;
+        border-bottom: none;
+    }
+    .autofinance-step.total .label,
+    .autofinance-step.total .value {
+        color: #002A54;
+        font-size: 1.08rem;
+        font-weight: 900;
+    }
+    .autofinance-step.total.positive {
+        background: #ECFDF3;
+        border: 1px solid #86EFAC;
+    }
+    .autofinance-step.total.positive .label,
+    .autofinance-step.total.positive .value {
+        color: #166534;
+    }
+    .autofinance-step.total.negative {
+        background: #FEF2F2;
+        border: 1px solid #FCA5A5;
+    }
+    .autofinance-step.total.negative .label {
+        color: #991B1B;
+    }
+    .autofinance-step.total.negative .value {
+        color: #B91C1C;
+    }
+    .autofinance-kpis {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0.8rem;
+        margin-top: 1rem;
+    }
+    .autofinance-kpi {
+        background: #F8FAFC;
+        border: 1px solid #E2E8F0;
+        border-radius: 14px;
+        padding: 0.9rem 1rem;
+    }
+    .autofinance-kpi .label {
+        font-size: 0.78rem;
+        color: #64748B;
+        font-weight: 700;
+        margin-bottom: 0.25rem;
+    }
+    .autofinance-kpi .value {
+        font-size: 1.3rem;
+        color: #002A54;
+        font-weight: 900;
+    }
+    @media (max-width: 700px) {
+        .autofinance-kpis {
+            grid-template-columns: 1fr;
+        }
+    }
+    .statement-footer {
+        margin-top: 1rem;
+        padding: 0.85rem 1rem;
+        border-radius: 14px;
+        background: linear-gradient(135deg, #002A54 0%, #005A9C 100%);
+        color: #FFFFFF;
+    }
+    .statement-footer .footer-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.8;
+        margin-bottom: 0.2rem;
+    }
+    .statement-footer .footer-value {
+        font-size: 1.55rem;
+        font-weight: 800;
+    }
+    .statement-footer .footer-note {
+        font-size: 0.82rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
     </style>
     """,
     unsafe_allow_html=True,
@@ -297,6 +678,195 @@ def custom_subheader(titre):
         {titre}
     </div>
     ''', unsafe_allow_html=True)
+
+
+def format_money(value):
+    return f"{value:,.0f}$".replace(",", " ")
+
+
+def statement_row(label, value, negative=False, total=False):
+    return {
+        "label": label,
+        "value": value,
+        "negative": negative,
+        "total": total,
+    }
+
+
+def render_statement_card(theme, kicker, title, pill, amount, rows, footer_label=None, footer_value=None, footer_note=None, summary_metrics=None):
+    theme_colors = {
+        "income": {"line": "#16A34A", "pill_bg": "#DCFCE7", "pill_fg": "#166534"},
+        "opex": {"line": "#E11D48", "pill_bg": "#FFE4E6", "pill_fg": "#9F1239"},
+        "nonrec": {"line": "#F97316", "pill_bg": "#FFEDD5", "pill_fg": "#9A3412"},
+    }
+    palette = theme_colors.get(theme, theme_colors["income"])
+    kicker_html = (
+        f'<div style="font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em; color:#64748B; font-weight:800; margin-bottom:0.2rem;">{escape(kicker)}</div>'
+        if kicker else ""
+    )
+    pill_html = (
+        f'<div style="padding:0.35rem 0.75rem; border-radius:999px; background:{palette["pill_bg"]}; color:{palette["pill_fg"]}; font-weight:800; white-space:nowrap;">{escape(pill)}</div>'
+        if pill else ""
+    )
+
+    with st.container(border=True):
+        header_html = (
+            f'<div style="height:6px;background:{palette["line"]};border-radius:999px;margin:-1rem -1rem 1.15rem -1rem;"></div>'
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">'
+            '<div>'
+            f"{kicker_html}"
+            f'<div style="font-size:1.1rem;line-height:1.2;color:#0F172A;font-weight:800;">{escape(title)}</div>'
+            '</div>'
+            f"{pill_html}"
+            '</div>'
+            f'<div style="font-size:2.05rem;color:#002A54;font-weight:900;margin:1.1rem 0 0.35rem 0;">{escape(amount)}</div>'
+        )
+        st.markdown(
+            header_html,
+            unsafe_allow_html=True,
+        )
+
+        st.divider()
+
+        for index, row in enumerate(rows):
+            left, right = st.columns([2.9, 1.45], gap="medium")
+            label_color = "#002A54" if row["total"] else "#475569"
+            value_color = "#B91C1C" if row["negative"] else "#0F172A"
+            if row["total"]:
+                value_color = "#002A54"
+            label_weight = 800 if row["total"] else 500
+            value_weight = 900 if row["total"] else 700
+
+            with left:
+                st.markdown(
+                    f'<div style="color:{label_color}; font-weight:{label_weight};">{escape(row["label"])}</div>',
+                    unsafe_allow_html=True,
+                )
+            with right:
+                st.markdown(
+                    f'<div style="text-align:right; color:{value_color}; font-weight:{value_weight}; white-space:nowrap; padding-right:0.25rem;">{escape(row["value"])}</div>',
+                    unsafe_allow_html=True,
+                )
+
+            if index < len(rows) - 1:
+                separator = "2px solid #CBD5E1" if row["total"] else "1px dashed #E2E8F0"
+                st.markdown(
+                    f'<div style="border-bottom:{separator}; margin:0.5rem 0 0.85rem 0;"></div>',
+                    unsafe_allow_html=True,
+                )
+
+        if summary_metrics:
+            st.markdown('<div style="margin-top:1rem;"></div>', unsafe_allow_html=True)
+            for metric in summary_metrics:
+                summary_html = (
+                    '<div style="border:1px solid #E2E8F0;border-radius:12px;padding:0.9rem 1rem;background:#F8FAFC;margin-bottom:0.75rem;">'
+                    f'<div style="font-size:0.8rem;color:#64748B;font-weight:700;margin-bottom:0.3rem;">{escape(metric["label"])}</div>'
+                    f'<div style="font-size:1.45rem;color:#002A54;font-weight:900;line-height:1.15;">{escape(metric["value"])}</div>'
+                    '</div>'
+                )
+                st.markdown(
+                    summary_html,
+                    unsafe_allow_html=True,
+                )
+
+        if footer_label and footer_value:
+            footer_note_html = (
+                f'<div style="font-size:0.82rem; opacity:0.9; margin-top:0.2rem;">{escape(footer_note)}</div>'
+                if footer_note else ""
+            )
+            footer_html = (
+                '<div style="margin-top:1rem;padding:0.9rem 1rem;border-radius:14px;background:linear-gradient(135deg, #002A54 0%, #005A9C 100%);color:#FFFFFF;">'
+                f'<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.08em;opacity:0.82;margin-bottom:0.2rem;">{escape(footer_label)}</div>'
+                f'<div style="font-size:1.45rem;font-weight:900;">{escape(footer_value)}</div>'
+                f"{footer_note_html}"
+                '</div>'
+            )
+            st.markdown(
+                footer_html,
+                unsafe_allow_html=True,
+            )
+
+
+def statement_card_html(theme, kicker, title, amount, caption, rows, footer_label=None, footer_value=None, footer_note=None, summary_metrics=None):
+    render_statement_card(
+        theme,
+        kicker,
+        title,
+        amount,
+        caption,
+        rows,
+        footer_label=footer_label,
+        footer_value=footer_value,
+        footer_note=footer_note,
+        summary_metrics=summary_metrics,
+    )
+    return ""
+
+
+def decision_card_html(label, value, note, variant="neutral"):
+    return (
+        f'<div class="decision-card {variant}">'
+        f'<div class="label">{escape(label)}</div>'
+        f'<div class="value">{escape(value)}</div>'
+        f'<div class="note">{escape(note)}</div>'
+        '</div>'
+    )
+
+
+def render_autofinancement_section(revenus_nets, depenses, rne, interets, capital, cashflow, mise_de_fonds, frais_acquisition):
+    badge_class = "positive" if cashflow >= 0 else "negative"
+    badge_text = "Se paie seul" if cashflow >= 0 else "Apport requis"
+    reste_mensuel = cashflow / 12
+    service_dette = interets + capital
+    apport_initial_total = mise_de_fonds + frais_acquisition
+    total_step_class = "positive" if cashflow >= 0 else "negative"
+    cashflow_label = "Argent restant après dette" if cashflow >= 0 else "Déficit après dette"
+    cashflow_value = format_money(cashflow) if cashflow >= 0 else f"-{format_money(abs(cashflow))}"
+    reste_mensuel_label = "Reste mensuel" if cashflow >= 0 else "Déficit mensuel"
+    reste_mensuel_value = format_money(reste_mensuel) if cashflow >= 0 else f"-{format_money(abs(reste_mensuel))}"
+
+    steps_html = "".join([
+        f'<div class="autofinance-step"><span class="label">Revenus nets effectifs</span><span class="value">{format_money(revenus_nets)}</span></div>',
+        f'<div class="autofinance-step minus"><span class="label">Moins dépenses d\'exploitation</span><span class="value">-{format_money(depenses)}</span></div>',
+        f'<div class="autofinance-step"><span class="label">Résultat net d\'exploitation (RNE)</span><span class="value">{format_money(rne)}</span></div>',
+        f'<div class="autofinance-step minus"><span class="label">Moins intérêts hypothécaires</span><span class="value">-{format_money(interets)}</span></div>',
+        f'<div class="autofinance-step minus"><span class="label">Moins capital remboursé</span><span class="value">-{format_money(capital)}</span></div>',
+        f'<div class="autofinance-step total {total_step_class}"><span class="label">{cashflow_label}</span><span class="value">{cashflow_value}</span></div>',
+    ])
+    kpis_html = "".join([
+        f'<div class="autofinance-kpi"><div class="label">Service de la dette annuel</div><div class="value">{format_money(service_dette)}</div></div>',
+        f'<div class="autofinance-kpi"><div class="label">{reste_mensuel_label}</div><div class="value">{reste_mensuel_value}</div></div>',
+    ])
+    sortie_poche_html = "".join([
+        f'<div class="autofinance-kpi"><div class="label">Mise de fonds</div><div class="value">{format_money(mise_de_fonds)}</div></div>',
+        f'<div class="autofinance-kpi"><div class="label">Frais d\'acquisition</div><div class="value">{format_money(frais_acquisition)}</div></div>',
+        f'<div class="autofinance-kpi"><div class="label">Total à sortir de votre poche</div><div class="value">{format_money(apport_initial_total)}</div></div>',
+    ])
+    subtitle = (
+        "L'immeuble couvre ses charges et sa dette avec les revenus locatifs."
+        if cashflow >= 0
+        else "Les revenus locatifs ne couvrent pas entièrement la dette en année 1."
+    )
+
+    html = (
+        '<div class="autofinance-box">'
+        '<div class="autofinance-head">'
+        '<div>'
+        '<div class="autofinance-title">Autofinancement du projet</div>'
+        f'<div class="autofinance-subtitle">{escape(subtitle)}</div>'
+        '</div>'
+        f'<div class="autofinance-badge {badge_class}">{badge_text}</div>'
+        '</div>'
+        f'<div class="autofinance-steps">{steps_html}</div>'
+        f'<div class="autofinance-kpis">{kpis_html}</div>'
+        '<div class="autofinance-steps" style="margin-top:1rem;">'
+        '<div class="autofinance-title" style="font-size:1rem; margin-bottom:0.2rem;">Apport du propriétaire non inclus ci-dessus</div>'
+        '<div class="autofinance-subtitle">Ces montants doivent être avancés personnellement au démarrage du projet.</div>'
+        '</div>'
+        f'<div class="autofinance-kpis">{sortie_poche_html}</div>'
+        '</div>'
+    )
+    st.markdown(html, unsafe_allow_html=True)
 
 # =============================================================================
 # TITRE ET LOGO
@@ -458,8 +1028,15 @@ if st.session_state.adresse_choisie:
 st.divider()
 
 # ── Autres informations (deux colonnes) ──────────────────────────────────────
-col1, col2 = st.columns(2, gap="large")
-with col1:
+ville_taxe = "Autre (entrer manuellement)"
+for v in TAUX_MUNICIPAUX.keys():
+    if v.lower() in ville.lower():
+        ville_taxe = v
+        break
+taux_municipal = TAUX_MUNICIPAUX.get(ville_taxe, 0.80)
+
+col_form, col_spacer = st.columns([1.35, 0.65], gap="large")
+with col_form:
 
     # Taux municipal calculé en arrière-plan selon la ville détectée
     ville_taxe = "Autre (entrer manuellement)"
@@ -470,7 +1047,7 @@ with col1:
     taux_municipal = TAUX_MUNICIPAUX.get(ville_taxe, 0.80)
 
 
-with col2:
+with col_form:
     prix_achat = st.number_input(
         "Prix d'achat ($)", min_value=0, value=500_000, step=5_000, format="%d",
     )
@@ -641,12 +1218,11 @@ projection = projeter_10_ans(
     taux_marginal_impot=taux_marginal_impot,
 )
 
-mise_de_fonds_totale = resultats["mise_de_fonds"] + resultats["frais_acquisition"]
 ratios = calculer_ratios(
     prix_achat=prix_achat,
     rne=resultats["rne"],
     cashflow_annee1=resultats["cashflow_avant_frais"],  # Cashflow opérationnel pour le Cash-on-cash
-    mise_de_fonds_totale=mise_de_fonds_totale,
+    mise_de_fonds=resultats["mise_de_fonds"],
     revenus_bruts=resultats["revenus_bruts_annuels"],
     paiement_annuel=resultats["paiement_annuel"],
     cashflows_irr=projection["cashflows_irr"],
@@ -665,64 +1241,103 @@ tab1, tab2, tab3, tab4 = st.tabs(
 # TAB 1 — ANALYSE ANNÉE 1
 # ─────────────────────────────────────────────────────────────────────────────
 with tab1:
-    custom_subheader("Résumé financier — Année 1")
+    custom_subheader("📈 Analyse Année 1")
 
-    # Métriques clés
-    m1, m2, m3, m4 = st.columns(4, gap="large")
+    perte_vacance = resultats["revenus_bruts_annuels"] - resultats["revenus_nets"]
+    revenus_rows = [
+        statement_row("Loyers bruts potentiels", format_money(resultats["revenus_bruts_annuels"])),
+        statement_row(f"Vacance ({taux_vacance:.1f}%)", f"-{format_money(perte_vacance)}", negative=True),
+        statement_row("Revenus nets effectifs", format_money(resultats["revenus_nets"]), total=True),
+    ]
 
-    def metric_html(titre, valeur, classe="neutral"):
-        return (
-            f'<div class="metric-card"><h3>{titre}</h3>'
-            f'<p class="value {classe}">{valeur}</p></div>'
-        )
+    depenses_rows = [
+        statement_row("Taxes municipales", format_money(resultats["taxes_municipales"])),
+        statement_row("Taxes scolaires", format_money(resultats["taxes_scolaires"])),
+        statement_row("Assurance", format_money(assurance)),
+    ]
+    if electricite > 0:
+        depenses_rows.append(statement_row("Électricité", format_money(electricite)))
+    depenses_rows.extend([
+        statement_row("Tonte", format_money(tonte)),
+        statement_row("Déneigement", format_money(deneigement)),
+        statement_row("Entretien / réparations", format_money(entretien_autre)),
+    ])
+    if gestion > 0:
+        depenses_rows.append(statement_row("Gestion", format_money(gestion)))
+    if autres_depenses > 0:
+        depenses_rows.append(statement_row("Autres charges", format_money(autres_depenses)))
+    acquisition_rows = [
+        statement_row("Droits de mutation", format_money(resultats["droits_mutation"])),
+        statement_row("Notaire", format_money(frais_notaire)),
+        statement_row("Inspection", format_money(frais_inspection)),
+        statement_row("Évaluation", format_money(frais_evaluation)),
+    ]
 
-    with m1:
-        st.markdown(metric_html("Mise de fonds", f"{resultats['mise_de_fonds']:,.0f}$"), unsafe_allow_html=True)
-    with m2:
-        st.markdown(metric_html("Paiement mensuel", f"{resultats['paiement_mensuel']:,.0f}$"), unsafe_allow_html=True)
-    with m3:
-        cf_class = "positive" if resultats["cashflow_avant_frais"] >= 0 else "negative"
-        st.markdown(metric_html("Cashflow annuel", f"{resultats['cashflow_avant_frais']:,.0f}$", cf_class), unsafe_allow_html=True)
-    with m4:
-        cf_class = "positive" if resultats["cashflow_avant_frais"] / 12 >= 0 else "negative"
-        st.markdown(metric_html("Cashflow mensuel", f"{resultats['cashflow_avant_frais'] / 12:,.0f}$", cf_class), unsafe_allow_html=True)
-
-    st.divider()
-
-    col_rev, col_dep, col_non_rec = st.columns(3, gap="large")
+    col_rev, col_dep, col_non_rec = st.columns(3, gap="medium")
 
     with col_rev:
-        custom_subheader("🟩 Revenus")
-        st.write(f"Loyers bruts marginaux : **{resultats['revenus_bruts_annuels']:,.0f}$**")
-        st.write(f"- Vacance ({taux_vacance:.1f}%) : **-{resultats['revenus_bruts_annuels'] - resultats['revenus_nets']:,.0f}$**")
-        st.divider()
-        st.write(f"**Revenus nets : {resultats['revenus_nets']:,.0f}$**")
+        st.markdown(
+            statement_card_html(
+                "income",
+                "",
+                "Revenus locatifs",
+                "",
+                format_money(resultats["revenus_nets"]),
+                revenus_rows,
+                None,
+                None,
+                None,
+            ),
+            unsafe_allow_html=True,
+        )
 
     with col_dep:
-        custom_subheader("🟥 Dépenses annuelles")
-        st.write(f"Taxes municipales : **{resultats['taxes_municipales']:,.0f}$**")
-        st.write(f"Taxes scolaires : **{resultats['taxes_scolaires']:,.0f}$**")
-        st.write(f"Assurance : **{assurance:,.0f}$**")
-        if electricite > 0:
-            st.write(f"Électricité : **{electricite:,.0f}$**")
-        st.write(f"Tonte : **{tonte:,.0f}$**")
-        st.write(f"Déneigement : **{deneigement:,.0f}$**")
-        st.write(f"Entretien/Réparations : **{entretien_autre:,.0f}$**")
-        if gestion > 0:
-            st.write(f"Gestion : **{gestion:,.0f}$**")
-        if autres_depenses > 0:
-            st.write(f"Autres : **{autres_depenses:,.0f}$**")
-        st.divider()
-        st.write(f"**Total dépenses OPEX : {resultats['depenses_totales']:,.0f}$**")
+        st.markdown(
+            statement_card_html(
+                "opex",
+                "",
+                "Dépenses annuelles",
+                "",
+                format_money(resultats["depenses_totales"]),
+                depenses_rows,
+                "Bénéfice d'exploitation",
+                format_money(resultats["rne"]),
+                None,
+            ),
+            unsafe_allow_html=True,
+        )
 
     with col_non_rec:
-        custom_subheader("🟧 Frais Non-Récurrents")
-        st.write(f"Droits mutation : **{resultats['droits_mutation']:,.0f}$**")
-        st.write(f"Notaire : **{frais_notaire:,.0f}$**")
-        st.write(f"Inspection : **{frais_inspection:,.0f}$**")
-        st.write(f"Évaluation : **{frais_evaluation:,.0f}$**")
-        st.divider()
-        st.write(f"**Total Acquisition : {resultats['frais_acquisition']:,.0f}$**")
+        st.markdown(
+            statement_card_html(
+                "nonrec",
+                "",
+                "Frais non récurrents",
+                "Année 1",
+                format_money(resultats["frais_acquisition"]),
+                acquisition_rows,
+                None,
+                None,
+                None,
+                summary_metrics=[
+                    {"label": "Mise de fonds", "value": format_money(resultats["mise_de_fonds"])},
+                    {"label": "Frais d'acquisition", "value": format_money(resultats["frais_acquisition"])},
+                ],
+            ),
+            unsafe_allow_html=True,
+        )
+
+    st.divider()
+    render_autofinancement_section(
+        revenus_nets=resultats["revenus_nets"],
+        depenses=resultats["depenses_totales"],
+        rne=resultats["rne"],
+        interets=resultats["interet_annee1"],
+        capital=resultats["capital_annee1"],
+        cashflow=resultats["cashflow_avant_frais"],
+        mise_de_fonds=resultats["mise_de_fonds"],
+        frais_acquisition=resultats["frais_acquisition"],
+    )
 
     # Graphique donut des dépenses
     st.divider()
@@ -748,43 +1363,101 @@ with tab1:
         dep_labels.append("Autres")
         dep_values.append(autres_depenses)
 
-    fig_donut = go.Figure(
-        data=[
-            go.Pie(
-                labels=dep_labels,
-                values=dep_values,
-                hole=0.5,
-                textinfo="label+percent",
-                marker=dict(
-                    colors=px.colors.qualitative.Set2[: len(dep_labels)]
-                ),
-            )
-        ]
+    dep_df = (
+        pd.DataFrame({"poste": dep_labels, "montant": dep_values})
+        .sort_values("montant", ascending=False)
+        .reset_index(drop=True)
     )
-    fig_donut.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(color="white"),
-        height=400,
-        showlegend=False,
-        margin=dict(t=20, b=20),
-    )
-    st.plotly_chart(fig_donut, use_container_width=True)
+    dep_df["part_pct"] = dep_df["montant"] / dep_df["montant"].sum() * 100
+    dep_df["montant_fmt"] = dep_df["montant"].apply(format_money)
+    dep_df["part_fmt"] = dep_df["part_pct"].apply(lambda x: f"{x:.1f}%")
 
-    # Frais d'acquisition
-    st.divider()
-    custom_subheader("Frais d'acquisition (non récurrents)")
-    fa1, fa2, fa3, fa4, fa5 = st.columns(5, gap="large")
-    with fa1:
-        st.metric("Droits de mutation", f"{resultats['droits_mutation']:,.0f}$")
-    with fa2:
-        st.metric("Notaire", f"{frais_notaire:,.0f}$")
-    with fa3:
-        st.metric("Inspection", f"{frais_inspection:,.0f}$")
-    with fa4:
-        st.metric("Évaluation", f"{frais_evaluation:,.0f}$")
-    with fa5:
-        st.metric("**Total**", f"{resultats['frais_acquisition']:,.0f}$")
+    color_map = {
+        "Hypothèque (intérêts)": "#D9B36C",
+        "Entretien": "#FFD23F",
+        "Entretien / réparations": "#FFD23F",
+        "Taxes munic.": "#64C2A6",
+        "Taxes municipales": "#64C2A6",
+        "Assurance": "#8C9FD1",
+        "Déneigement": "#A6D854",
+        "Tonte": "#F08AC0",
+        "Taxes scol.": "#9AA5B1",
+        "Taxes scolaires": "#9AA5B1",
+        "Électricité": "#FF8A5B",
+        "Gestion": "#6C7BFF",
+        "Autres": "#B8C0CC",
+    }
+    dep_colors = [color_map.get(label, "#94A3B8") for label in dep_df["poste"]]
+
+    chart_col, rank_col = st.columns([1.15, 0.85], gap="large")
+
+    with chart_col:
+        fig_donut = go.Figure(
+            data=[
+                go.Pie(
+                    labels=dep_df["poste"],
+                    values=dep_df["montant"],
+                    hole=0.62,
+                    sort=False,
+                    direction="clockwise",
+                    textinfo="none",
+                    hovertemplate="<b>%{label}</b><br>%{value:,.0f}$<br>%{percent}<extra></extra>",
+                    marker=dict(colors=dep_colors, line=dict(color="#F8FAFC", width=3)),
+                )
+            ]
+        )
+        fig_donut.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#334155"),
+            height=430,
+            showlegend=False,
+            margin=dict(t=10, b=10, l=10, r=10),
+            annotations=[
+                dict(
+                    text=f"<span style='font-size:13px;color:#64748B;'>Total</span><br><span style='font-size:28px;color:#002A54;'><b>{format_money(dep_df['montant'].sum())}</b></span>",
+                    x=0.5,
+                    y=0.5,
+                    showarrow=False,
+                    align="center",
+                )
+            ],
+        )
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with rank_col:
+        fig_bar = go.Figure(
+            go.Bar(
+                x=dep_df["montant"],
+                y=dep_df["poste"],
+                orientation="h",
+                marker=dict(color=dep_colors, line=dict(color="rgba(255,255,255,0.9)", width=1)),
+                text=dep_df["montant_fmt"] + " · " + dep_df["part_fmt"],
+                textposition="outside",
+                cliponaxis=False,
+                customdata=dep_df[["part_fmt"]],
+                hovertemplate="<b>%{y}</b><br>%{x:,.0f}$<br>%{customdata[0]} du total<extra></extra>",
+            )
+        )
+        fig_bar.update_layout(
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color="#334155"),
+            height=430,
+            margin=dict(t=18, b=10, l=10, r=120),
+            xaxis=dict(
+                showgrid=False,
+                showticklabels=False,
+                zeroline=False,
+                title=None,
+            ),
+            yaxis=dict(
+                title=None,
+                tickfont=dict(size=13, color="#475569"),
+                autorange="reversed",
+            ),
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 2 — PROJECTION 10 ANS
@@ -1142,6 +1815,122 @@ with tab4:
         st.info(f"⏱️ **Délai de récupération de la mise de fonds** : {delai} ans")
     else:
         st.warning("⏱️ La mise de fonds n'est pas récupérée dans les 10 ans par le cashflow seul.")
+
+    st.divider()
+    custom_subheader("📌 Aide à la décision")
+
+    cout_annuel_a_couvrir = resultats["depenses_totales"] + resultats["paiement_annuel"]
+    facteur_occupation = 1 - (taux_vacance / 100)
+    loyer_equilibre_annuel = (cout_annuel_a_couvrir / facteur_occupation) if facteur_occupation > 0 else None
+    loyer_equilibre_mensuel = (loyer_equilibre_annuel / 12) if loyer_equilibre_annuel is not None else None
+    loyer_equilibre_par_logement = (loyer_equilibre_mensuel / nb_logements) if loyer_equilibre_mensuel and nb_logements > 0 else None
+    ecart_loyer = (loyers_mensuels_total - loyer_equilibre_mensuel) if loyer_equilibre_mensuel is not None else None
+
+    if loyer_equilibre_mensuel is None:
+        loyer_equilibre_value = "N/A"
+        loyer_equilibre_note = "Impossible a calculer avec 100% de vacance."
+        loyer_equilibre_variant = "warning"
+    else:
+        loyer_equilibre_value = f"{format_money(loyer_equilibre_mensuel)}/mois"
+        if ecart_loyer is not None and ecart_loyer >= 0:
+            loyer_equilibre_note = (
+                f"Actuel : {format_money(loyers_mensuels_total)}/mois. "
+                f"Marge de {format_money(ecart_loyer)}/mois."
+            )
+            loyer_equilibre_variant = "positive"
+        else:
+            manque = abs(ecart_loyer) if ecart_loyer is not None else 0
+            loyer_equilibre_note = (
+                f"Actuel : {format_money(loyers_mensuels_total)}/mois. "
+                f"Il manque {format_money(manque)}/mois pour l'equilibre."
+            )
+            loyer_equilibre_variant = "negative"
+        if loyer_equilibre_par_logement is not None:
+            loyer_equilibre_note += f" Environ {format_money(loyer_equilibre_par_logement)}/logement/mois."
+
+    vacance_max_brute = (
+        (1 - (cout_annuel_a_couvrir / resultats["revenus_bruts_annuels"])) * 100
+        if resultats["revenus_bruts_annuels"] > 0 else None
+    )
+    if vacance_max_brute is None:
+        vacance_value = "N/A"
+        vacance_note = "Aucun revenu brut disponible pour calculer cette marge."
+        vacance_variant = "warning"
+    elif vacance_max_brute <= 0:
+        vacance_value = "0,0%"
+        vacance_note = "Meme a pleine occupation, le projet ne couvre pas totalement ses charges et sa dette."
+        vacance_variant = "negative"
+    else:
+        vacance_value = f"{vacance_max_brute:.1f}%"
+        if vacance_max_brute >= taux_vacance:
+            vacance_note = f"Avec les loyers actuels, le projet reste viable jusqu'a {vacance_max_brute:.1f}% de vacance."
+            vacance_variant = "positive"
+        else:
+            vacance_note = f"La vacance utilisee ({taux_vacance:.1f}%) depasse deja la marge supportable."
+            vacance_variant = "warning"
+
+    cashflow_annuel = resultats["cashflow_avant_frais"]
+    cashflow_mensuel = cashflow_annuel / 12
+    if cashflow_annuel >= 0:
+        cashflow_value = format_money(cashflow_annuel)
+        cashflow_note = f"Soit {format_money(cashflow_mensuel)}/mois apres OPEX et service de la dette."
+        cashflow_variant = "positive"
+        cashflow_label = "Surplus apres dette"
+    else:
+        cashflow_value = f"-{format_money(abs(cashflow_annuel))}"
+        cashflow_note = f"Soit -{format_money(abs(cashflow_mensuel))}/mois a couvrir par le proprietaire."
+        cashflow_variant = "negative"
+        cashflow_label = "Deficit apres dette"
+
+    apport_initial = resultats["mise_de_fonds"] + resultats["frais_acquisition"]
+    apport_note = (
+        f"Mise de fonds {format_money(resultats['mise_de_fonds'])} + "
+        f"frais d'acquisition {format_money(resultats['frais_acquisition'])}."
+    )
+
+    info_row1 = st.columns(2, gap="large")
+    with info_row1[0]:
+        st.markdown(
+            decision_card_html(
+                "Loyer d'equilibre",
+                loyer_equilibre_value,
+                loyer_equilibre_note,
+                loyer_equilibre_variant,
+            ),
+            unsafe_allow_html=True,
+        )
+    with info_row1[1]:
+        st.markdown(
+            decision_card_html(
+                "Vacance max. supportable",
+                vacance_value,
+                vacance_note,
+                vacance_variant,
+            ),
+            unsafe_allow_html=True,
+        )
+
+    info_row2 = st.columns(2, gap="large")
+    with info_row2[0]:
+        st.markdown(
+            decision_card_html(
+                cashflow_label,
+                cashflow_value,
+                cashflow_note,
+                cashflow_variant,
+            ),
+            unsafe_allow_html=True,
+        )
+    with info_row2[1]:
+        st.markdown(
+            decision_card_html(
+                "Apport initial requis",
+                format_money(apport_initial),
+                apport_note,
+                "neutral",
+            ),
+            unsafe_allow_html=True,
+        )
 
     # Recommandation
     st.divider()

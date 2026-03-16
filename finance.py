@@ -264,7 +264,7 @@ def calculer_ratios(
     prix_achat: float,
     rne: float,
     cashflow_annee1: float,
-    mise_de_fonds_totale: float,
+    mise_de_fonds: float,
     revenus_bruts: float,
     paiement_annuel: float,
     cashflows_irr: list,
@@ -275,8 +275,8 @@ def calculer_ratios(
     cap_rate = (rne / prix_achat) * 100 if prix_achat > 0 else 0.0
 
     cash_on_cash = (
-        (cashflow_annee1 / mise_de_fonds_totale) * 100
-        if mise_de_fonds_totale > 0
+        (cashflow_annee1 / mise_de_fonds) * 100
+        if mise_de_fonds > 0
         else 0.0
     )
 
