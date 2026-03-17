@@ -36,8 +36,7 @@ from finance import (
     analyser_annee1,
     projeter_10_ans,
     calculer_ratios,
-    expliquer_ratio,
-    generer_recommandation,
+    analyser_opportunite_investissement,
     calculer_taxes_municipales,
     calculer_taxes_scolaires,
 )
@@ -210,6 +209,195 @@ st.markdown(
         font-size: 0.84rem;
         color: #475569;
         line-height: 1.35;
+    }
+
+    .projection-table-shell {
+        position: relative;
+        border: 1px solid #D8E2EE;
+        border-radius: 18px;
+        overflow: hidden;
+        background: #FFFFFF;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+        margin: 0.5rem 0 1rem 0;
+    }
+    .projection-table-shell.with-trigger {
+        margin-top: 0.1rem;
+    }
+    .projection-table-actions {
+        position: absolute;
+        top: 0.8rem;
+        right: 0.8rem;
+        z-index: 8;
+        opacity: 0;
+        pointer-events: none;
+        transform: translateY(-4px);
+        transition: opacity 0.18s ease, transform 0.18s ease;
+    }
+    .projection-table-shell:hover .projection-table-actions,
+    .projection-table-shell:focus-within .projection-table-actions {
+        opacity: 1;
+        pointer-events: auto;
+        transform: translateY(0);
+    }
+    .projection-table-action {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.2rem;
+        height: 2.2rem;
+        border-radius: 10px;
+        border: 1px solid #D8E2EE;
+        background: rgba(255, 255, 255, 0.96);
+        color: #35506E;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.10);
+        text-decoration: none;
+        backdrop-filter: blur(6px);
+        cursor: pointer;
+        appearance: none;
+    }
+    .projection-table-action:hover {
+        background: #FFFFFF;
+        color: #002A54;
+        border-color: #AFC3D9;
+    }
+    .projection-table-action svg {
+        width: 1rem;
+        height: 1rem;
+    }
+    .projection-table-scroll {
+        overflow-x: auto;
+    }
+    .projection-table {
+        width: max-content;
+        min-width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .projection-table thead tr.group-row th {
+        background: linear-gradient(180deg, #EEF5FB 0%, #E2EDF8 100%);
+        color: #46627F;
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        text-align: center;
+        padding: 0.72rem 0.9rem;
+        border-bottom: 1px solid #D8E2EE;
+        border-right: 1px solid #D8E2EE;
+        white-space: nowrap;
+    }
+    .projection-table thead tr.column-row th {
+        background: #F8FBFF;
+        color: #35506E;
+        font-size: 0.88rem;
+        font-weight: 800;
+        text-align: center;
+        padding: 0.9rem 0.85rem 0.85rem 0.85rem;
+        border-bottom: 1px solid #D8E2EE;
+        border-right: 1px solid #E2E8F0;
+        vertical-align: bottom;
+        white-space: nowrap;
+    }
+    .projection-table thead tr.column-row th.is-single-line {
+        vertical-align: middle;
+    }
+    .projection-table thead th .th-title {
+        display: block;
+        line-height: 1.1;
+    }
+    .projection-table thead th .th-sub {
+        display: block;
+        margin-top: 0.18rem;
+        color: #64748B;
+        font-size: 0.72rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+    .projection-table thead th .th-sub.is-continuation {
+        margin-top: 0.12rem;
+        color: inherit;
+        font-size: inherit;
+        font-weight: inherit;
+    }
+    .projection-table tbody th,
+    .projection-table tbody td {
+        background: #FFFFFF;
+        color: #0F172A;
+        font-size: 0.98rem;
+        padding: 0.82rem 0.9rem;
+        border-bottom: 1px solid #E2E8F0;
+        border-right: 1px solid #E2E8F0;
+        white-space: nowrap;
+    }
+    .projection-table tbody tr:nth-child(even) th,
+    .projection-table tbody tr:nth-child(even) td {
+        background: #FCFDFE;
+    }
+    .projection-table tbody tr.is-year0 th,
+    .projection-table tbody tr.is-year0 td {
+        background: #FFF8ED;
+    }
+    .projection-table tbody tr.is-year10 th,
+    .projection-table tbody tr.is-year10 td {
+        background: #F3FBF5;
+    }
+    .projection-table tbody tr:hover th,
+    .projection-table tbody tr:hover td {
+        background: #F8FBFF;
+    }
+    .projection-table th.is-sticky,
+    .projection-table td.is-sticky {
+        position: sticky;
+        left: 0;
+        z-index: 3;
+        box-shadow: 1px 0 0 #E2E8F0;
+    }
+    .projection-table thead th.is-sticky {
+        z-index: 5;
+    }
+    .projection-table tbody th.is-year {
+        min-width: 72px;
+        text-align: center;
+        color: #002A54;
+        font-weight: 900;
+    }
+    .projection-table td.is-money {
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+    }
+    .projection-table td.is-empty {
+        color: #94A3B8;
+        text-align: center;
+        font-weight: 700;
+    }
+    .projection-table td.is-positive {
+        color: #166534;
+        font-weight: 800;
+    }
+    .projection-table td.is-negative {
+        color: #B91C1C;
+        font-weight: 800;
+    }
+    .projection-table td.is-sale {
+        color: #92400E;
+        font-weight: 900;
+        background: linear-gradient(180deg, #FFFDF4 0%, #FFF7D6 100%);
+    }
+    .projection-table td.is-strong {
+        font-weight: 900;
+    }
+    .projection-table tr > *:last-child {
+        border-right: none;
+    }
+    .projection-table tbody tr:last-child > * {
+        border-bottom: none;
+    }
+    div[data-testid="stDialog"] div[role="dialog"],
+    div[data-testid="stDialog"] section[role="dialog"] {
+        width: min(96vw, 1760px) !important;
+    }
+    div[data-testid="stDialog"] .projection-table-shell {
+        margin-bottom: 0;
     }
 
     /* Score localisation */
@@ -811,6 +999,239 @@ def decision_card_html(label, value, note, variant="neutral"):
         f'<div class="note">{escape(note)}</div>'
         '</div>'
     )
+
+
+def render_table_fullscreen_button(button_key, help_text):
+    action_col, _ = st.columns([0.07, 0.93], gap="small")
+    with action_col:
+        return st.button(
+            "⛶",
+            key=button_key,
+            help=help_text,
+            type="secondary",
+            use_container_width=False,
+        )
+
+
+def render_grouped_financial_table(
+    df_numeric,
+    df_display,
+    column_specs,
+    cell_class_getter,
+    row_class_getter=None,
+    table_anchor_id="financial-table-anchor",
+    enable_hover_action=True,
+):
+    grouped_headers = []
+    for spec in column_specs[1:]:
+        if not grouped_headers or grouped_headers[-1]["label"] != spec["group"]:
+            grouped_headers.append({"label": spec["group"], "colspan": 1})
+        else:
+            grouped_headers[-1]["colspan"] += 1
+
+    group_header_html = ''.join(
+        f'<th colspan="{group["colspan"]}">{escape(group["label"])}</th>'
+        for group in grouped_headers
+    )
+
+    column_header_parts = []
+    for spec in column_specs[1:]:
+        header_class = "is-single-line" if not spec["subtitle"] else ""
+        subtitle_class = "th-sub"
+        if spec.get("subtitle_variant") == "continuation":
+            subtitle_class += " is-continuation"
+        subtitle_html = (
+            f'<span class="{subtitle_class}">{escape(spec["subtitle"])}</span>'
+            if spec["subtitle"]
+            else ""
+        )
+        column_header_parts.append(
+            f'<th class="{header_class}"><span class="th-title">{escape(spec["title"])}</span>{subtitle_html}</th>'
+        )
+    column_header_html = ''.join(column_header_parts)
+
+    row_html = []
+    for row_index in range(len(df_numeric)):
+        numeric_row = df_numeric.iloc[row_index]
+        display_row = df_display.iloc[row_index]
+        row_classes = row_class_getter(row_index, numeric_row, display_row) if row_class_getter else []
+
+        cells = []
+        for spec in column_specs:
+            cell_value = display_row[spec["key"]]
+            cell_classes = []
+
+            if spec["kind"] == "year":
+                cell_classes.extend(["is-year", "is-sticky"])
+                cells.append(
+                    f'<th scope="row" class="{" ".join(cell_classes)}">{escape(str(cell_value))}</th>'
+                )
+                continue
+
+            raw_value = float(numeric_row[spec["key"]])
+            cell_classes.append("is-money")
+            cell_classes.extend(cell_class_getter(spec, raw_value, numeric_row, display_row))
+
+            cells.append(
+                f'<td class="{" ".join(cell_classes)}">{escape(str(cell_value))}</td>'
+            )
+
+        row_html.append(
+            f'<tr class="{" ".join(row_classes)}">{"".join(cells)}</tr>'
+        )
+
+    shell_classes = ["projection-table-shell"]
+    if enable_hover_action:
+        shell_classes.append("with-trigger")
+
+    table_html = ''.join(
+        [
+            f'<div id="{table_anchor_id}" class="{" ".join(shell_classes)}">',
+            '<div class="projection-table-scroll">',
+            '<table class="projection-table">',
+            '<thead>',
+            '<tr class="group-row">',
+            '<th class="is-sticky" rowspan="2">Annee</th>',
+            group_header_html,
+            '</tr>',
+            f'<tr class="column-row">{column_header_html}</tr>',
+            '</thead>',
+            f'<tbody>{"".join(row_html)}</tbody>',
+            '</table>',
+            '</div>',
+            '</div>',
+        ]
+    )
+    st.markdown(table_html, unsafe_allow_html=True)
+
+
+def render_projection_table(df_numeric, df_display, enable_hover_action=True):
+    open_fullscreen_dialog = False
+    if enable_hover_action:
+        open_fullscreen_dialog = render_table_fullscreen_button(
+            "projection_table_fullscreen_button",
+            "Ouvrir le tableau de projection en plein ecran",
+        )
+
+    column_specs = [
+        {"key": "Annee", "title": "Annee", "subtitle": "", "subtitle_variant": "detail", "group": None, "kind": "year", "sticky": True},
+        {"key": "Mise de fonds", "title": "Mise de", "subtitle": "fonds", "subtitle_variant": "continuation", "group": "Apport initial", "kind": "money"},
+        {"key": "Frais d'acquisition", "title": "Frais d'", "subtitle": "acquisition", "subtitle_variant": "continuation", "group": "Apport initial", "kind": "money"},
+        {"key": "RNE", "title": "RNE", "subtitle": "annuel", "subtitle_variant": "continuation", "group": "Exploitation", "kind": "money"},
+        {"key": "Interets", "title": "Interets", "subtitle": "hypothecaires", "subtitle_variant": "continuation", "group": "Exploitation", "kind": "money"},
+        {"key": "Capital rembourse", "title": "Capital", "subtitle": "rembourse", "subtitle_variant": "continuation", "group": "Exploitation", "kind": "money"},
+        {"key": "Cash flow avant impot", "title": "Cash flow", "subtitle": "avant impot", "subtitle_variant": "continuation", "group": "Exploitation", "kind": "money"},
+        {"key": "Impot estime", "title": "Impot", "subtitle": "estime", "subtitle_variant": "continuation", "group": "Fiscalite", "kind": "money"},
+        {"key": "Cash flow apres impot", "title": "Cash flow", "subtitle": "apres impot", "subtitle_variant": "continuation", "group": "Fiscalite", "kind": "money"},
+        {"key": "Produit de vente estime", "title": "Produit de", "subtitle": "vente estime", "subtitle_variant": "continuation", "group": "Sortie", "kind": "money"},
+        {"key": "Flux total (TRI)", "title": "Flux total", "subtitle": "", "subtitle_variant": "detail", "group": "Sortie", "kind": "money"},
+    ]
+
+    positive_negative_columns = {
+        "Cash flow avant impot",
+        "Cash flow apres impot",
+        "Flux total (TRI)",
+    }
+
+    def projection_row_classes(row_index, numeric_row, display_row):
+        year_value = str(display_row["Annee"])
+        row_classes = []
+        if year_value == "0":
+            row_classes.append("is-year0")
+        if year_value == "10":
+            row_classes.append("is-year10")
+        return row_classes
+
+    def projection_cell_classes(spec, raw_value, numeric_row, display_row):
+        cell_classes = []
+        if abs(raw_value) < 0.005 and spec["key"] != "Flux total (TRI)":
+            cell_classes.append("is-empty")
+        if spec["key"] in positive_negative_columns:
+            if raw_value > 0.005:
+                cell_classes.append("is-positive")
+            elif raw_value < -0.005:
+                cell_classes.append("is-negative")
+        if spec["key"] == "Impot estime" and raw_value < -0.005:
+            cell_classes.append("is-positive")
+        if spec["key"] == "Produit de vente estime" and raw_value > 0.005:
+            cell_classes.append("is-sale")
+        if spec["key"] == "Flux total (TRI)":
+            cell_classes.append("is-strong")
+        return cell_classes
+
+    render_grouped_financial_table(
+        df_numeric,
+        df_display,
+        column_specs,
+        projection_cell_classes,
+        row_class_getter=projection_row_classes,
+        table_anchor_id="projection-table-anchor",
+        enable_hover_action=enable_hover_action,
+    )
+
+    if open_fullscreen_dialog:
+        show_projection_table_dialog(df_numeric, df_display)
+
+
+@st.dialog("Projection 10 ans - tableau plein ecran", width="large")
+def show_projection_table_dialog(df_numeric, df_display):
+    st.caption("Vue agrandie du tableau detaille de projection.")
+    render_projection_table(df_numeric, df_display, enable_hover_action=False)
+
+
+@st.dialog("Amortissement du pret - tableau plein ecran", width="large")
+def show_amortization_table_dialog(df_numeric, df_display):
+    st.caption("Vue agrandie du tableau d'amortissement du pret.")
+    render_amortization_table(df_numeric, df_display, enable_hover_action=False)
+
+
+def render_amortization_table(df_numeric, df_display, enable_hover_action=True):
+    open_fullscreen_dialog = False
+    if enable_hover_action:
+        open_fullscreen_dialog = render_table_fullscreen_button(
+            "amortization_table_fullscreen_button",
+            "Ouvrir le tableau d'amortissement en plein ecran",
+        )
+
+    column_specs = [
+        {"key": "Annee", "title": "Annee", "subtitle": "", "subtitle_variant": "detail", "group": None, "kind": "year", "sticky": True},
+        {"key": "Solde debut", "title": "Solde", "subtitle": "debut", "subtitle_variant": "continuation", "group": "Ouverture", "kind": "money"},
+        {"key": "Paiement annuel", "title": "Paiement", "subtitle": "annuel", "subtitle_variant": "continuation", "group": "Paiement", "kind": "money"},
+        {"key": "Interets", "title": "Interets", "subtitle": "", "subtitle_variant": "detail", "group": "Paiement", "kind": "money"},
+        {"key": "Capital rembourse", "title": "Capital", "subtitle": "rembourse", "subtitle_variant": "continuation", "group": "Paiement", "kind": "money"},
+        {"key": "Solde fin", "title": "Solde", "subtitle": "fin", "subtitle_variant": "continuation", "group": "Cloture", "kind": "money"},
+    ]
+
+    def amortization_row_classes(row_index, numeric_row, display_row):
+        row_classes = []
+        if row_index == len(df_numeric) - 1 or abs(float(numeric_row["Solde fin"])) < 0.005:
+            row_classes.append("is-year10")
+        return row_classes
+
+    def amortization_cell_classes(spec, raw_value, numeric_row, display_row):
+        cell_classes = []
+        if abs(raw_value) < 0.005:
+            cell_classes.append("is-empty")
+        if spec["key"] == "Capital rembourse" and raw_value > 0.005:
+            cell_classes.append("is-positive")
+        if spec["key"] == "Interets" and raw_value > 0.005:
+            cell_classes.append("is-negative")
+        if spec["key"] in {"Solde debut", "Solde fin"}:
+            cell_classes.append("is-strong")
+        return cell_classes
+
+    render_grouped_financial_table(
+        df_numeric,
+        df_display,
+        column_specs,
+        amortization_cell_classes,
+        row_class_getter=amortization_row_classes,
+        table_anchor_id="amortization-table-anchor",
+        enable_hover_action=enable_hover_action,
+    )
+
+    if open_fullscreen_dialog:
+        show_amortization_table_dialog(df_numeric, df_display)
 
 
 def render_autofinancement_section(revenus_nets, depenses, rne, interets, capital, cashflow, mise_de_fonds, frais_acquisition):
@@ -1471,16 +1892,57 @@ with tab2:
         resultats["mise_de_fonds"] + resultats["frais_acquisition"],
     )
     produit_vente_an10 = float(df_proj["produit_vente_estime"].iloc[-1]) if not df_proj.empty else 0.0
-
-    st.markdown(
-        f"""
-        <div class="info-box">
-            <div><strong>Annee 0 :</strong> mise de fonds {format_money(resultats["mise_de_fonds"])} + frais d'acquisition {format_money(resultats["frais_acquisition"])} = <strong>{format_money(investissement_initial)}</strong></div>
-            <div style="margin-top:0.35rem;"><strong>Annee 10 :</strong> le produit de vente estime suppose une revente a la valeur projetee, moins le solde du pret, sans impot de disposition.</div>
-        </div>
-        """,
-        unsafe_allow_html=True,
+    equite_an10 = float(df_proj["equite"].iloc[-1]) if not df_proj.empty else 0.0
+    cashflow_cumule_apres_impot = (
+        float(df_proj["cashflow_cumule_apres_impot"].iloc[-1]) if not df_proj.empty else 0.0
     )
+    valeur_immeuble_an10 = float(df_proj["valeur_immeuble"].iloc[-1]) if not df_proj.empty else 0.0
+    solde_pret_an10 = float(df_proj["solde_pret"].iloc[-1]) if not df_proj.empty else 0.0
+    annee_cashflow_positif = None
+    if not df_proj.empty:
+        annees_cashflow_positif = df_proj.loc[df_proj["cashflow_apres_impot"] >= 0, "annee"]
+        if not annees_cashflow_positif.empty:
+            annee_cashflow_positif = int(annees_cashflow_positif.iloc[0])
+
+    projection_card_specs = [
+        (
+            "Equite an 10",
+            format_money(equite_an10),
+            f"Patrimoine accumule: valeur projetee {format_money(valeur_immeuble_an10)} moins solde du pret {format_money(solde_pret_an10)}.",
+            "positive",
+        ),
+        (
+            "Cash flow cumule",
+            format_money(cashflow_cumule_apres_impot),
+            "Somme des cash flows apres impot sur 10 ans, hors revente.",
+            "positive" if cashflow_cumule_apres_impot >= 0 else "negative",
+        ),
+        (
+            "Solde pret an 10",
+            format_money(solde_pret_an10),
+            "Montant d'hypotheque restant a rembourser apres 10 ans.",
+            "neutral",
+        ),
+        (
+            "Cash flow positif",
+            f"Annee {annee_cashflow_positif}" if annee_cashflow_positif else "Jamais",
+            (
+                "Premiere annee ou le cash flow apres impot devient positif."
+                if annee_cashflow_positif
+                else "Le cash flow apres impot reste negatif sur les 10 ans."
+            ),
+            "positive" if annee_cashflow_positif else "warning",
+        ),
+    ]
+    projection_card_rows = [projection_card_specs[:2], projection_card_specs[2:]]
+    for card_row in projection_card_rows:
+        row_columns = st.columns(2, gap="large")
+        for column, (label, value, note, variant) in zip(row_columns, card_row):
+            with column:
+                st.markdown(
+                    decision_card_html(label, value, note, variant),
+                    unsafe_allow_html=True,
+                )
 
     def projection_money(value, blank_zero=False):
         if blank_zero and abs(value) < 0.005:
@@ -1528,42 +1990,7 @@ with tab2:
             lambda value: projection_money(value, blank_zero=(col != "Flux total (TRI)"))
         )
 
-    def color_projection(val):
-        if not isinstance(val, str) or "$" not in val:
-            return ""
-        clean_val = val.replace(" ", "").replace("$", "").replace(",", "")
-        try:
-            numeric_val = float(clean_val)
-        except ValueError:
-            return ""
-        if numeric_val > 0:
-            return "color: #166534; font-weight: 700;"
-        if numeric_val < 0:
-            return "color: #B91C1C; font-weight: 700;"
-        return ""
-
-    # Tableau avec style Streamlit (background color rendering is clearer)
-    df_affichage = df_projection_display.copy()
-    df_affichage.columns = [
-        "Annee",
-        "Mise de fonds",
-        "Frais d'acquisition",
-        "RNE",
-        "Interets",
-        "Capital rembourse",
-        "Cash flow avant impot",
-        "Impot estime",
-        "Cash flow apres impot",
-        "Produit de vente estime",
-        "Flux total (TRI)",
-    ]
-
-    styled_df = df_affichage.style.applymap(
-        color_projection,
-        subset=["Cash flow avant impot", "Cash flow apres impot", "Flux total (TRI)"],
-    )
-
-    st.dataframe(styled_df, use_container_width=True, hide_index=True)
+    render_projection_table(df_projection, df_projection_display)
 
     st.divider()
 
@@ -1620,15 +2047,25 @@ with tab2:
             go.Scatter(
                 x=df_proj["annee"],
                 y=df_proj["equite"],
-                name="Produit de vente estime",
+                name="Equite estimee",
                 line=dict(color="#F59E0B", width=3),
+                hovertemplate="Annee %{x}<br>Equite: %{y:,.0f}$<extra></extra>",
+            )
+        )
+        fig_val.add_trace(
+            go.Scatter(
+                x=[int(df_proj["annee"].iloc[-1])],
+                y=[produit_vente_an10],
+                mode="markers",
+                name="Produit vente an 10",
+                marker=dict(size=12, color="#F59E0B", line=dict(color="#FFFFFF", width=2)),
                 hovertemplate="Annee %{x}<br>Produit estime: %{y:,.0f}$<extra></extra>",
             )
         )
         fig_val.add_annotation(
             x=int(df_proj["annee"].iloc[-1]),
-            y=float(df_proj["equite"].iloc[-1]),
-            text=f"Annee 10<br>{format_money(produit_vente_an10)}",
+            y=produit_vente_an10,
+            text=f"Produit an 10<br>{format_money(produit_vente_an10)}",
             showarrow=True,
             arrowhead=2,
             arrowsize=1,
@@ -1638,7 +2075,7 @@ with tab2:
             font=dict(color="#92400E", size=12),
         )
         fig_val.update_layout(
-            title="Valeur et produit de vente estime",
+            title="Valeur et equite estimees",
             xaxis_title="Annee",
             yaxis_title="$",
             paper_bgcolor="rgba(0,0,0,0)",
@@ -1664,9 +2101,10 @@ with tab2:
         "Capital rembourse",
         "Solde fin",
     ]
-    for col in df_amort.columns[1:]:
-        df_amort[col] = df_amort[col].apply(format_money)
-    st.dataframe(df_amort, use_container_width=True, hide_index=True)
+    df_amort_display = df_amort.copy()
+    for col in df_amort_display.columns[1:]:
+        df_amort_display[col] = df_amort_display[col].apply(format_money)
+    render_amortization_table(df_amort, df_amort_display)
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TAB 3 — LOCALISATION
@@ -1858,6 +2296,22 @@ with tab3:
 with tab4:
     custom_subheader("🎯 Ratios financiers")
 
+    analyse_investissement = analyser_opportunite_investissement(
+        ratios=ratios,
+        prix_achat=prix_achat,
+        rne=resultats["rne"],
+        revenus_bruts_annuels=resultats["revenus_bruts_annuels"],
+        depenses_totales=resultats["depenses_totales"],
+        paiement_annuel=resultats["paiement_annuel"],
+        montant_pret=resultats["montant_pret"],
+        mise_de_fonds=resultats["mise_de_fonds"],
+        frais_acquisition=resultats["frais_acquisition"],
+        cashflow_annuel=resultats["cashflow_avant_frais"],
+        loyers_mensuels_total=loyers_mensuels_total,
+        nb_logements=nb_logements,
+        taux_vacance=taux_vacance,
+    )
+
     ratio_keys = [
         ("cap_rate", "%"),
         ("cash_on_cash", "%"),
@@ -1883,17 +2337,18 @@ with tab4:
                 else:
                     valeur_str = f"{valeur:.2f}%"
 
-                # Couleur basée sur l'interprétation
-                explication = expliquer_ratio(cle, valeur)
-                interp = explication["interpretation"]
-                if "🟢" in interp:
-                    color = "#4ade80"
-                elif "🟡" in interp:
-                    color = "#facc15"
+                explication = analyse_investissement["ratio_reviews"][cle]
+                status = explication.get("status", "neutral")
+                if status == "positive":
+                    color = "#16A34A"
+                elif status == "warning":
+                    color = "#D97706"
+                elif status == "negative":
+                    color = "#DC2626"
                 else:
-                    color = "#f87171"
+                    color = "#64748B"
 
-            explication = expliquer_ratio(cle, valeur if valeur is not None else 0)
+            explication = analyse_investissement["ratio_reviews"][cle]
 
             with cols[j]:
                 st.markdown(
@@ -2032,8 +2487,60 @@ with tab4:
     # Recommandation
     st.divider()
     custom_subheader("📝 Recommandation")
-    recommandation = generer_recommandation(ratios, prix_achat)
-    st.markdown(recommandation)
+
+    verdict = analyse_investissement["verdict"]
+    st.markdown(
+        decision_card_html(
+            verdict["label"],
+            verdict["value"],
+            verdict["note"],
+            verdict["variant"],
+        ),
+        unsafe_allow_html=True,
+    )
+
+    recap_cols = st.columns(2, gap="large")
+    with recap_cols[0]:
+        st.markdown("**Forces du dossier**")
+        if analyse_investissement["strengths"]:
+            for point in analyse_investissement["strengths"]:
+                st.markdown(f"- {point}")
+        else:
+            st.caption("Aucune force marquee ne ressort avec les seuils actuels.")
+
+    with recap_cols[1]:
+        st.markdown("**Points de vigilance**")
+        if analyse_investissement["risks"]:
+            for point in analyse_investissement["risks"]:
+                st.markdown(f"- {point}")
+        else:
+            st.caption("Aucun point de vigilance majeur n'est remonte par le moteur.")
+
+    action_rows = [
+        analyse_investissement["actions"][:2],
+        analyse_investissement["actions"][2:],
+    ]
+    for action_row in action_rows:
+        action_cols = st.columns(2, gap="large")
+        for col, action in zip(action_cols, action_row):
+            with col:
+                st.markdown(
+                    decision_card_html(
+                        action["label"],
+                        action["value"],
+                        action["note"],
+                        action["variant"],
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+    for alert in analyse_investissement["alerts"]:
+        if alert["variant"] == "negative":
+            st.error(alert["message"])
+        elif alert["variant"] == "positive":
+            st.success(alert["message"])
+        else:
+            st.warning(alert["message"])
 
     # Résumé des loyers si détaillé
     if loyers_details:
