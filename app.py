@@ -8,6 +8,7 @@ import plotly.express as px
 import folium
 from streamlit_folium import st_folium
 from html import escape
+import re
 
 from config import (
     AMORTISSEMENT_DEFAUT,
@@ -48,7 +49,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-AI_RECOMMENDATION_CACHE_VERSION = "2026-03-23-gemini-premium-v2"
+AI_RECOMMENDATION_CACHE_VERSION = "2026-03-23-gemini-2-5-flash-v1"
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -137,9 +138,21 @@ st.markdown(
         border: 1px solid #E2E8F0;
         border-radius: 12px;
         padding: 1.2rem;
-        margin-bottom: 1rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
         border-left: 4px solid #FFC000; /* Accent Or IMVEST */
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+    .ratio-grid-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 1.1rem;
+        align-items: stretch;
+    }
+    .ratio-grid-row .ratio-card {
+        margin-bottom: 0;
     }
     .ratio-card .ratio-name {
         color: #475569;
@@ -168,6 +181,12 @@ st.markdown(
         background: #F1F5F9;
         color: #334155;
         border-left: 3px solid #005A9C;
+        margin-top: auto;
+    }
+    @media (max-width: 900px) {
+        .ratio-grid-row {
+            grid-template-columns: 1fr;
+        }
     }
 
     .decision-card {
@@ -176,6 +195,16 @@ st.markdown(
         border-radius: 16px;
         padding: 1rem 1.05rem;
         box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+    .decision-grid-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 1.1rem;
+        align-items: stretch;
+    }
+    .decision-grid-row .decision-card {
         min-height: 100%;
     }
     .decision-card.positive {
@@ -218,6 +247,42 @@ st.markdown(
         font-size: 0.84rem;
         color: #475569;
         line-height: 1.35;
+        margin-top: 0.7rem;
+    }
+    .decision-card .decision-detail-list {
+        display: grid;
+        gap: 0.42rem;
+        margin-top: 0.2rem;
+    }
+    .decision-card .decision-detail-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        padding: 0.35rem 0;
+        border-bottom: 1px solid #E7EEF5;
+    }
+    .decision-card .decision-detail-row:last-child {
+        border-bottom: none;
+    }
+    .decision-card .decision-detail-label {
+        font-size: 0.8rem;
+        color: #64748B;
+        font-weight: 700;
+    }
+    .decision-card .decision-detail-value {
+        font-size: 0.82rem;
+        color: #0F172A;
+        font-weight: 800;
+        text-align: right;
+    }
+    @media (max-width: 900px) {
+        .decision-grid-row {
+            grid-template-columns: 1fr;
+        }
+        .decision-card .decision-detail-row {
+            align-items: flex-start;
+        }
     }
     .ai-insight-shell {
         background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
@@ -878,6 +943,9 @@ st.markdown(
         color: #475569;
         font-size: 0.88rem;
         line-height: 1.45;
+    }
+    .ai-plan-row-gap {
+        height: 0.9rem;
     }
     .ai-preview-shell {
         background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%);
@@ -1747,6 +1815,85 @@ def format_money(value):
     return f"{value:,.0f}$".replace(",", " ")
 
 
+def format_money_input_value(value, decimals=0):
+    if decimals > 0:
+        return f"{float(value):,.{decimals}f}$".replace(",", " ")
+    return f"{int(round(float(value))):,}$".replace(",", " ")
+
+
+def parse_money_input_value(raw_value, fallback=0, decimals=0, min_value=0):
+    raw_text = str(raw_value or "")
+    cleaned = raw_text.replace("\u202f", " ").replace("\xa0", " ")
+    cleaned = cleaned.replace("$", "").replace(" ", "")
+    cleaned = cleaned.replace(",", ".")
+    cleaned = re.sub(r"[^0-9.\-]", "", cleaned)
+
+    if cleaned in {"", "-", ".", "-."}:
+        parsed = fallback
+    else:
+        try:
+            parsed = float(cleaned)
+        except ValueError:
+            parsed = fallback
+
+    if min_value is not None:
+        parsed = max(min_value, parsed)
+
+    if decimals > 0:
+        return round(float(parsed), decimals)
+    return int(round(float(parsed)))
+
+
+def money_input(label, value, key, min_value=0, decimals=0, help=None, disabled=False):
+    display_key = f"{key}__display"
+    touched_key = f"{key}__touched"
+    last_value_key = f"{key}__last_value"
+
+    current_value = round(float(value), decimals) if decimals > 0 else int(round(float(value)))
+
+    if display_key not in st.session_state:
+        st.session_state[display_key] = format_money_input_value(current_value, decimals)
+        st.session_state[touched_key] = False
+        st.session_state[last_value_key] = current_value
+    elif disabled or (
+        not st.session_state.get(touched_key, False)
+        and st.session_state.get(last_value_key) != current_value
+    ):
+        st.session_state[display_key] = format_money_input_value(current_value, decimals)
+        st.session_state[last_value_key] = current_value
+
+    def _sync_money_input():
+        parsed = parse_money_input_value(
+            st.session_state.get(display_key, ""),
+            fallback=current_value,
+            decimals=decimals,
+            min_value=min_value,
+        )
+        st.session_state[display_key] = format_money_input_value(parsed, decimals)
+        st.session_state[touched_key] = True
+        st.session_state[last_value_key] = parsed
+
+    st.text_input(
+        label,
+        key=display_key,
+        help=help,
+        disabled=disabled,
+        on_change=_sync_money_input,
+    )
+
+    if disabled:
+        return current_value
+
+    parsed_value = parse_money_input_value(
+        st.session_state.get(display_key, ""),
+        fallback=current_value,
+        decimals=decimals,
+        min_value=min_value,
+    )
+    st.session_state[last_value_key] = parsed_value
+    return parsed_value
+
+
 def statement_row(label, value, negative=False, total=False):
     return {
         "label": label,
@@ -1867,11 +2014,33 @@ def statement_card_html(theme, kicker, title, amount, caption, rows, footer_labe
 
 
 def decision_card_html(label, value, note, variant="neutral"):
+    return decision_card_html_with_details(label, value, note, variant=variant)
+
+
+def decision_card_html_with_details(label, value, note, variant="neutral", details=None):
+    details_html = ""
+    if details:
+        detail_rows = []
+        for detail_label, detail_value in details:
+            if not detail_value:
+                continue
+            detail_rows.append(
+                f'<div class="decision-detail-row">'
+                f'<span class="decision-detail-label">{escape(detail_label)}</span>'
+                f'<span class="decision-detail-value">{escape(detail_value)}</span>'
+                f"</div>"
+            )
+        if detail_rows:
+            details_html = f'<div class="decision-detail-list">{"".join(detail_rows)}</div>'
+
+    note_html = f'<div class="note">{escape(note)}</div>' if note else ""
+
     return (
         f'<div class="decision-card {variant}">'
         f'<div class="label">{escape(label)}</div>'
         f'<div class="value">{escape(value)}</div>'
-        f'<div class="note">{escape(note)}</div>'
+        f"{details_html}"
+        f"{note_html}"
         '</div>'
     )
 
@@ -2305,6 +2474,8 @@ def render_premium_action_cards(actions):
     for row_index, action_row in enumerate([primary_row, secondary_row]):
         if not action_row:
             continue
+        if row_index > 0:
+            st.markdown('<div class="ai-plan-row-gap"></div>', unsafe_allow_html=True)
         if row_index == 0:
             cols = st.columns(2, gap="large")
         else:
@@ -2703,7 +2874,7 @@ with st.sidebar:
         value=TAUX_INTERET_DEFAUT, step=0.25, format="%.2f",
     )
     amortissement = st.number_input(
-        "Amortissement (années)", min_value=5, max_value=40,
+        "Amortissement (années)", min_value=5, max_value=50,
         value=AMORTISSEMENT_DEFAUT, step=5,
     )
     mise_de_fonds_pct = st.number_input(
@@ -2711,7 +2882,7 @@ with st.sidebar:
         value=MISE_DE_FONDS_PCT_DEFAUT, step=5.0, format="%.1f",
     )
     st.markdown(
-        '<div class="info-box">💡 <b>APH Select</b> : amortissement jusqu\'à 40 ans '
+        '<div class="info-box">💡 <b>APH Select</b> : amortissement jusqu\'à 50 ans selon le pointage obtenu '
         "et mise de fonds dès 5%.</div>",
         unsafe_allow_html=True,
     )
@@ -2851,12 +3022,8 @@ with col_form:
 
 
 with col_form:
-    prix_achat = st.number_input(
-        "Prix d'achat ($)", min_value=0, value=500_000, step=5_000, format="%d",
-    )
-    evaluation_municipale = st.number_input(
-        "Évaluation municipale ($)", min_value=0, value=400_000, step=5_000, format="%d",
-    )
+    prix_achat = money_input("Prix d'achat", value=500_000, key="prix_achat", min_value=0)
+    evaluation_municipale = money_input("Évaluation municipale", value=400_000, key="evaluation_municipale", min_value=0)
     nb_logements = st.number_input(
         "Nombre de logements", min_value=1, max_value=50, value=4, step=1,
     )
@@ -2880,9 +3047,12 @@ with col_l2:
 mult_freq = 1 if frequence_loyer == "Mensuel" else (1/12)
 
 if mode_loyer == "Total":
-    label_total = "Loyer total annuel ($)" if frequence_loyer == "Annuel" else "Loyer total mensuel ($)"
-    loyers_saisis = st.number_input(
-        label_total, min_value=0, value=3_600 if frequence_loyer == "Mensuel" else 43_200, step=100, format="%d",
+    label_total = "Loyer total annuel" if frequence_loyer == "Annuel" else "Loyer total mensuel"
+    loyers_saisis = money_input(
+        label_total,
+        value=3_600 if frequence_loyer == "Mensuel" else 43_200,
+        key=f"loyers_total_{frequence_loyer.lower()}",
+        min_value=0,
     )
     loyers_mensuels_total = loyers_saisis * mult_freq
     loyers_details = None
@@ -2893,9 +3063,11 @@ else:
     loyers_details = []
     for i in range(nb_logements):
         with cols[i % len(cols)]:
-            loyer_i = st.number_input(
-                f"Logement {i + 1} ($)", min_value=0, value=900 if frequence_loyer == "Mensuel" else 10_800, step=50,
-                format="%d", key=f"loyer_{i}",
+            loyer_i = money_input(
+                f"Logement {i + 1}",
+                value=900 if frequence_loyer == "Mensuel" else 10_800,
+                key=f"loyer_{i}_{frequence_loyer.lower()}",
+                min_value=0,
             )
             loyers_details.append(loyer_i)
     loyers_mensuels_total = sum(loyers_details) * mult_freq
@@ -2905,29 +3077,30 @@ else:
 # SECTION 2 — TAXES (Saisie Manuelle ou Automatique)
 # =============================================================================
 section_header("🏛️ Taxes (annuelles)")
-taxes_mode = st.radio("Mode de saisie des taxes", ["Automatique (selon évaluation)", "Saisie manuelle"], horizontal=True)
 
 taxes_muni_auto = calculer_taxes_municipales(evaluation_municipale, taux_municipal)
 taxes_scol_auto = calculer_taxes_scolaires(evaluation_municipale)
 
 col_t1, col_t2 = st.columns(2, gap="large")
 with col_t1:
-    taxes_municipales_man = st.number_input(
-        "Taxes municipales ($)", min_value=0.0, value=float(taxes_muni_auto),
-        step=100.0, format="%.2f", disabled=(taxes_mode == "Automatique (selon évaluation)")
+    taxes_municipales_man = money_input(
+        "Taxes municipales",
+        value=float(taxes_muni_auto),
+        key="taxes_municipales_man",
+        min_value=0.0,
+        decimals=2,
     )
 with col_t2:
-    taxes_scolaires_man = st.number_input(
-        "Taxes scolaires ($)", min_value=0.0, value=float(taxes_scol_auto),
-        step=50.0, format="%.2f", disabled=(taxes_mode == "Automatique (selon évaluation)")
+    taxes_scolaires_man = money_input(
+        "Taxes scolaires",
+        value=float(taxes_scol_auto),
+        key="taxes_scolaires_man",
+        min_value=0.0,
+        decimals=2,
     )
 
-if taxes_mode == "Automatique (selon évaluation)":
-    taxes_municipales_finales = taxes_muni_auto
-    taxes_scolaires_finales = taxes_scol_auto
-else:
-    taxes_municipales_finales = taxes_municipales_man
-    taxes_scolaires_finales = taxes_scolaires_man
+taxes_municipales_finales = taxes_municipales_man
+taxes_scolaires_finales = taxes_scolaires_man
 
 # =============================================================================
 # SECTION 3 — DÉPENSES
@@ -2943,16 +3116,16 @@ est_elec = ESTIMATION_ELECTRICITE
 
 col_d1, col_d2, col_d3 = st.columns(3, gap="large")
 with col_d1:
-    assurance = st.number_input("Assurance ($)", min_value=0, value=est_ass, step=100, format="%d")
-    electricite = st.number_input("Électricité ($)", min_value=0, value=est_elec, step=100, format="%d", help="Chauffage, communs. Souvent 0 si payé par locataires.")
+    assurance = money_input("Assurance", value=est_ass, key="assurance", min_value=0)
+    electricite = money_input("Électricité", value=est_elec, key="electricite", min_value=0, help="Chauffage, communs. Souvent 0 si payé par locataires.")
 with col_d2:
-    tonte = st.number_input("Tonte de pelouse ($)", min_value=0, value=est_tonte, step=50, format="%d")
-    deneigement = st.number_input("Déneigement ($)", min_value=0, value=est_deneige, step=50, format="%d")
+    tonte = money_input("Tonte de pelouse", value=est_tonte, key="tonte", min_value=0)
+    deneigement = money_input("Déneigement", value=est_deneige, key="deneigement", min_value=0)
 with col_d3:
-    entretien_autre = st.number_input("Autre entretien/réparations ($)", min_value=0, value=est_ent_autre, step=100, format="%d")
-    gestion = st.number_input("Frais de gestion ($)", min_value=0, value=0, step=100, format="%d")
+    entretien_autre = money_input("Autre entretien/réparations", value=est_ent_autre, key="entretien_autre", min_value=0)
+    gestion = money_input("Frais de gestion", value=0, key="gestion", min_value=0)
 
-autres_depenses = st.number_input("Autres dépenses (ex: permis, concierge) ($)", min_value=0, value=200, step=100, format="%d")
+autres_depenses = money_input("Autres dépenses (ex: permis, concierge)", value=200, key="autres_depenses", min_value=0)
 
 # =============================================================================
 # SECTION 4 — FRAIS D'ACQUISITION
@@ -2961,17 +3134,11 @@ section_header("🏷️ Frais d'acquisition (année 1 non récurrents)")
 col_f1, col_f2, col_f3 = st.columns(3, gap="large")
 
 with col_f1:
-    frais_notaire = st.number_input(
-        "Notaire ($)", min_value=0, value=FRAIS_NOTAIRE_DEFAUT, step=100, format="%d",
-    )
+    frais_notaire = money_input("Notaire", value=FRAIS_NOTAIRE_DEFAUT, key="frais_notaire", min_value=0)
 with col_f2:
-    frais_inspection = st.number_input(
-        "Inspection ($)", min_value=0, value=FRAIS_INSPECTION_DEFAUT, step=100, format="%d",
-    )
+    frais_inspection = money_input("Inspection", value=FRAIS_INSPECTION_DEFAUT, key="frais_inspection", min_value=0)
 with col_f3:
-    frais_evaluation = st.number_input(
-        "Évaluation ($)", min_value=0, value=FRAIS_EVALUATION_DEFAUT, step=100, format="%d",
-    )
+    frais_evaluation = money_input("Évaluation", value=FRAIS_EVALUATION_DEFAUT, key="frais_evaluation", min_value=0)
 
 # =============================================================================
 # CALCULS
@@ -3329,7 +3496,7 @@ with tab2:
         ),
     ]
     projection_card_rows = [projection_card_specs[:2], projection_card_specs[2:]]
-    for card_row in projection_card_rows:
+    for row_index, card_row in enumerate(projection_card_rows):
         row_columns = st.columns(2, gap="large")
         for column, (label, value, note, variant) in zip(row_columns, card_row):
             with column:
@@ -3337,6 +3504,10 @@ with tab2:
                     decision_card_html(label, value, note, variant),
                     unsafe_allow_html=True,
                 )
+        if row_index < len(projection_card_rows) - 1:
+            st.markdown("<div style='height:1.1rem;'></div>", unsafe_allow_html=True)
+
+    st.markdown("<div style='height:0.85rem;'></div>", unsafe_allow_html=True)
 
     def projection_money(value, blank_zero=False):
         if blank_zero and abs(value) < 0.005:
@@ -3525,33 +3696,22 @@ with tab3:
         # Lancement automatique si nouvelle adresse sélectionnée, ou bouton manuel
         _lancer = st.session_state.get("analyse_locale_auto", False)
 
-        col_btn1, col_btn2 = st.columns([3, 1], gap="large")
-        with col_btn1:
-            if st.button("🔄 Relancer l'analyse", help="Relancer manuellement l'analyse de localisation"):
-                _lancer = True
-        with col_btn2:
-            if _lancer:
-                st.markdown(
-                    "<div style='padding:0.45rem 0;color:#4ade80;font-size:0.85rem;'>⚡ Analyse automatique…</div>",
-                    unsafe_allow_html=True,
-                )
+        if st.button("🔄 Relancer l'analyse", help="Relancer manuellement l'analyse de localisation"):
+            _lancer = True
 
         if _lancer:
             st.session_state.analyse_locale_auto = False  # reset du flag
             with st.spinner("Analyse de l'emplacement en cours (peut prendre 10-20 secondes)..."):
 
                 # 1. Services proches (rayon 5 km)
-                st.info("Recherche de TOUS les services à proximité (OpenStreetMap)...")
                 st.session_state.loc_tous_services = obtenir_tous_services(_lat, _lon, rayon=5000)
 
                 # 2. Loisirs & commodités dans les limites municipales OSM
                 _ville_loisirs = st.session_state.adresse_choisie.get("ville", "")
-                st.info(f"Comptage des loisirs & commodités ({_ville_loisirs})...")
                 st.session_state.loc_loisirs_ville = obtenir_loisirs_ville(_ville_loisirs, _lat, _lon)
                 st.session_state.loc_ville_loisirs_nom = _ville_loisirs
 
                 # 3. Démographie locale
-                st.info("Analyse démographique locale...")
                 st.session_state.loc_stats_demo = analyser_demographie(_lat, _lon, _region)
 
                 # 4. Score de localisation
@@ -3648,7 +3808,6 @@ with tab3:
                 st.metric("Centres de loisirs & Sports", f"{loisirs_ville['nb_loisirs']:,}".replace(",", " "))
             with col_c3:
                 st.metric("Stations-service", f"{loisirs_ville['nb_essence']:,}".replace(",", " "))
-            st.caption(f"*(Cinémas, arénas, centres de dek hockey, piscines municipales, etc.) — Source : {loisirs_ville['methode']}*")
             st.divider()
 
             # Grandes villes proches
@@ -3726,8 +3885,8 @@ with tab4:
 
     # Afficher en grille 2×3
     for row_start in range(0, len(ratio_keys), 2):
-        cols = st.columns(2, gap="large")
-        for j, (cle, unite) in enumerate(ratio_keys[row_start : row_start + 2]):
+        card_html = []
+        for cle, unite in ratio_keys[row_start : row_start + 2]:
             valeur = ratios.get(cle)
             if valeur is None:
                 valeur_str = "N/A"
@@ -3753,16 +3912,19 @@ with tab4:
 
             explication = analyse_investissement_locale["ratio_reviews"][cle]
 
-            with cols[j]:
-                st.markdown(
-                    f'<div class="ratio-card">'
-                    f'<div class="ratio-name">{explication["nom"]}</div>'
-                    f'<div class="ratio-value" style="color:{color};">{valeur_str}</div>'
-                    f'<div class="ratio-desc">{explication["description"]}</div>'
-                    f'<div class="ratio-interp">{explication["interpretation"]}</div>'
-                    f"</div>",
-                    unsafe_allow_html=True,
-                )
+            card_html.append(
+                f'<div class="ratio-card">'
+                f'<div class="ratio-name">{explication["nom"]}</div>'
+                f'<div class="ratio-value" style="color:{color};">{valeur_str}</div>'
+                f'<div class="ratio-desc">{explication["description"]}</div>'
+                f'<div class="ratio-interp">{explication["interpretation"]}</div>'
+                f"</div>"
+            )
+
+        st.markdown(
+            f'<div class="ratio-grid-row">{"".join(card_html)}</div>',
+            unsafe_allow_html=True,
+        )
 
     # Délai de récupération
     delai = ratios.get("delai_recuperation")
@@ -3780,6 +3942,7 @@ with tab4:
     loyer_equilibre_mensuel = (loyer_equilibre_annuel / 12) if loyer_equilibre_annuel is not None else None
     loyer_equilibre_par_logement = (loyer_equilibre_mensuel / nb_logements) if loyer_equilibre_mensuel and nb_logements > 0 else None
     ecart_loyer = (loyers_mensuels_total - loyer_equilibre_mensuel) if loyer_equilibre_mensuel is not None else None
+    loyer_equilibre_details = []
 
     if loyer_equilibre_mensuel is None:
         loyer_equilibre_value = "N/A"
@@ -3787,25 +3950,24 @@ with tab4:
         loyer_equilibre_variant = "warning"
     else:
         loyer_equilibre_value = f"{format_money(loyer_equilibre_mensuel)}/mois"
+        loyer_equilibre_details.append(("Loyers actuels", f"{format_money(loyers_mensuels_total)}/mois"))
         if ecart_loyer is not None and ecart_loyer >= 0:
+            loyer_equilibre_details.append(("Marge", f"{format_money(ecart_loyer)}/mois"))
             loyer_equilibre_note = (
-                f"Actuel : {format_money(loyers_mensuels_total)}/mois. "
-                f"Marge de {format_money(ecart_loyer)}/mois."
+                "Seuil minimal: il couvre les depenses et la dette (~CSD 1.00x), "
+                "sans marge de securite additionnelle."
             )
             loyer_equilibre_variant = "positive"
         else:
             manque = abs(ecart_loyer) if ecart_loyer is not None else 0
+            loyer_equilibre_details.append(("Manque", f"{format_money(manque)}/mois"))
             loyer_equilibre_note = (
-                f"Actuel : {format_money(loyers_mensuels_total)}/mois. "
-                f"Il manque {format_money(manque)}/mois pour l'equilibre."
+                "Seuil minimal: il couvre seulement les depenses et la dette (~CSD 1.00x). "
+                "Le dossier reste sous ce niveau."
             )
             loyer_equilibre_variant = "negative"
         if loyer_equilibre_par_logement is not None:
-            loyer_equilibre_note += f" Environ {format_money(loyer_equilibre_par_logement)}/logement/mois."
-        loyer_equilibre_note += (
-            " Seuil minimal: il couvre les depenses et la dette (~CSD 1.00x), "
-            "sans marge de securite additionnelle."
-        )
+            loyer_equilibre_details.append(("Seuil / logement", f"~{format_money(loyer_equilibre_par_logement)}/mois"))
 
     vacance_max_brute = (
         (1 - (cout_annuel_a_couvrir / resultats["revenus_bruts_annuels"])) * 100
@@ -3847,49 +4009,46 @@ with tab4:
         f"frais d'acquisition {format_money(resultats['frais_acquisition'])}."
     )
 
-    info_row1 = st.columns(2, gap="large")
-    with info_row1[0]:
-        st.markdown(
-            decision_card_html(
+    st.markdown(
+        (
+            '<div class="decision-grid-row">'
+            + decision_card_html_with_details(
                 "Loyer d'equilibre",
                 loyer_equilibre_value,
                 loyer_equilibre_note,
                 loyer_equilibre_variant,
-            ),
-            unsafe_allow_html=True,
-        )
-    with info_row1[1]:
-        st.markdown(
-            decision_card_html(
+                details=loyer_equilibre_details,
+            )
+            + decision_card_html(
                 "Vacance max. supportable",
                 vacance_value,
                 vacance_note,
                 vacance_variant,
-            ),
-            unsafe_allow_html=True,
-        )
+            )
+            + "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
-    info_row2 = st.columns(2, gap="large")
-    with info_row2[0]:
-        st.markdown(
-            decision_card_html(
+    st.markdown(
+        (
+            '<div class="decision-grid-row">'
+            + decision_card_html(
                 cashflow_label,
                 cashflow_value,
                 cashflow_note,
                 cashflow_variant,
-            ),
-            unsafe_allow_html=True,
-        )
-    with info_row2[1]:
-        st.markdown(
-            decision_card_html(
+            )
+            + decision_card_html(
                 "Apport initial requis",
                 format_money(apport_initial),
                 apport_note,
                 "neutral",
-            ),
-            unsafe_allow_html=True,
-        )
+            )
+            + "</div>"
+        ),
+        unsafe_allow_html=True,
+    )
 
     recommendation_context = {
         "prix_achat": prix_achat,
@@ -4037,14 +4196,6 @@ with tab4:
     preview_html = scenario_preview_html(primary_action)
     if preview_html:
         st.markdown(preview_html, unsafe_allow_html=True)
-
-    for alert in analyse_investissement_locale["alerts"]:
-        if alert["variant"] == "negative":
-            st.error(alert["message"])
-        elif alert["variant"] == "positive":
-            st.success(alert["message"])
-        else:
-            st.warning(alert["message"])
 
     # Résumé des loyers si détaillé
     if loyers_details:

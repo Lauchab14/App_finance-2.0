@@ -143,12 +143,12 @@ from geocoding import _haversine
 def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: float = None, lon: float = None) -> dict:
     """
     Calcule un score sur 100 basé sur les temps de transport locaux (55 pts),
-    le profil démographique (35 pts), et la proximité d'un grand centre (10 pts).
+    le profil démographique, et la proximité d'un grand centre.
     """
     points = 0
-    max_points = 100
     details = []
     trajet_score_target = 55
+    max_points = 98
     
     # 1. Analyse des trajets (55 points)
     # Le bareme est volontairement plus faible pour les parcs, puis
@@ -160,7 +160,7 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         "cegep": 2,
         "universite": 1,
         "pharmacie": 11,
-        "bus": 11,
+        "bus": 8,
         "parc": 6
     }
     trajet_scale = trajet_score_target / sum(bareme_trajet.values())
@@ -171,11 +171,28 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         trajet_info = trajets.get(service)
         if trajet_info and trajet_info.get("temps_min"):
             t = trajet_info["temps_min"]
-            if t <= 3: pts = max_pts
-            elif t <= 5: pts = max_pts * 0.8
-            elif t <= 10: pts = max_pts * 0.5
-            elif t <= 15: pts = max_pts * 0.2
-            else: pts = 0
+            if service == "secondaire":
+                if t <= 5:
+                    pts = max_pts
+                elif t <= 10:
+                    pts = max_pts * 0.85
+                elif t <= 15:
+                    pts = max_pts * 0.6
+                elif t <= 20:
+                    pts = max_pts * 0.35
+                else:
+                    pts = 0
+            else:
+                if t <= 3:
+                    pts = max_pts
+                elif t <= 5:
+                    pts = max_pts * 0.8
+                elif t <= 10:
+                    pts = max_pts * 0.5
+                elif t <= 15:
+                    pts = max_pts * 0.2
+                else:
+                    pts = 0
 
             pts_scaled = pts * trajet_scale
             score_trajets += pts_scaled
@@ -203,27 +220,32 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
     pts_locataires = 0
     loc_pct = stats_demo.get("locataires_pct")
     if loc_pct is not None:
-        if loc_pct >= 60: pts_locataires = 15
-        elif loc_pct >= 40: pts_locataires = 12
-        elif loc_pct >= 25: pts_locataires = 8
-        elif loc_pct >= 10: pts_locataires = 4
-        else: pts_locataires = 0
+        if loc_pct >= 55:
+            pts_locataires = 15
+        elif loc_pct >= 35:
+            pts_locataires = 12
+        elif loc_pct >= 20:
+            pts_locataires = 8
+        elif loc_pct >= 10:
+            pts_locataires = 5
+        else:
+            pts_locataires = 0
         details.append({"critere": "Proportion locataires", "points": pts_locataires, "max": 15, "valeur": f"{loc_pct}%"})
     else:
         details.append({"critere": "Proportion locataires", "points": 0, "max": 15, "valeur": "Inconnu"})
 
-    # Croissance de la population (10 pts)
+    # Croissance de la population (8 pts)
     pts_croissance = 0
     croissance = stats_demo.get("croissance_pop")
     if croissance is not None:
-        if croissance >= 5.0: pts_croissance = 10
-        elif croissance >= 2.0: pts_croissance = 8
-        elif croissance >= 0.0: pts_croissance = 5
+        if croissance >= 5.0: pts_croissance = 8
+        elif croissance >= 2.0: pts_croissance = 6
+        elif croissance >= 0.0: pts_croissance = 4
         elif croissance >= -2.0: pts_croissance = 2
         else: pts_croissance = 0
-        details.append({"critere": "Croissance population", "points": pts_croissance, "max": 10, "valeur": f"{croissance}%"})
+        details.append({"critere": "Croissance population", "points": pts_croissance, "max": 8, "valeur": f"{croissance}%"})
     else:
-        details.append({"critere": "Croissance population", "points": 0, "max": 10, "valeur": "Inconnu"})
+        details.append({"critere": "Croissance population", "points": 0, "max": 8, "valeur": "Inconnu"})
 
     points += pts_revenu + pts_locataires + pts_croissance
 
@@ -281,21 +303,21 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         details.append({"critere": "Proximité centres économiques", "points": 0, "max": 10, "valeur": "N/A"})
         
     points += pts_ville
-    points = round(points, 1)
+    score_total = round((points / max_points) * 100, 1) if max_points else 0
 
     # 3. Résumé
-    if points >= 80:
+    if score_total >= 80:
         resume = "🌟 **Score Exceptionnel** : L'emplacement offre un accès rapide à tous les services clés et la démographie locale soutient une très forte demande locative. Risque de vacance très faible."
-    elif points >= 60:
+    elif score_total >= 60:
         resume = "🟢 **Très Bon Score** : Le secteur est attractif. Les services de base sont facilement accessibles et le marché locatif y est sain."
-    elif points >= 40:
+    elif score_total >= 40:
         resume = "🟡 **Score Moyen** : L'emplacement est correct mais présente des vulnérabilités (ex: services éloignés ou faible demande locative). Un véhicule sera probablement nécessaire pour les locataires."
     else:
         resume = "🔴 **Score Faible** : Zone peu dynamique ou isolée. Le profil démographique et le manque de services de proximité augmentent le risque locatif."
 
     return {
-        "score_total": points,
-        "max_score": max_points,
+        "score_total": score_total,
+        "max_score": 100,
         "details": details,
         "resume": resume,
         "top_villes": top_villes
