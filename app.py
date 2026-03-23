@@ -3200,7 +3200,7 @@ with tab1:
                 go.Pie(
                     labels=dep_df["poste"],
                     values=dep_df["montant"],
-                    hole=0.62,
+                    hole=0.66,
                     sort=False,
                     direction="clockwise",
                     textinfo="none",
@@ -3218,9 +3218,22 @@ with tab1:
             margin=dict(t=10, b=10, l=10, r=10),
             annotations=[
                 dict(
-                    text=f"<span style='font-size:13px;color:#64748B;'>Total</span><br><span style='font-size:28px;color:#002A54;'><b>{format_money(dep_df['montant'].sum())}</b></span>",
+                    text="Total annuel",
                     x=0.5,
-                    y=0.5,
+                    y=0.54,
+                    font=dict(size=13, color="#64748B"),
+                    xanchor="center",
+                    yanchor="middle",
+                    showarrow=False,
+                    align="center",
+                ),
+                dict(
+                    text=f"<b>{format_money(dep_df['montant'].sum())}</b>",
+                    x=0.5,
+                    y=0.47,
+                    font=dict(size=26, color="#002A54"),
+                    xanchor="center",
+                    yanchor="middle",
                     showarrow=False,
                     align="center",
                 )
@@ -3274,7 +3287,6 @@ with tab2:
         resultats["mise_de_fonds"] + resultats["frais_acquisition"],
     )
     produit_vente_an10 = float(df_proj["produit_vente_estime"].iloc[-1]) if not df_proj.empty else 0.0
-    equite_an10 = float(df_proj["equite"].iloc[-1]) if not df_proj.empty else 0.0
     cashflow_cumule_apres_impot = (
         float(df_proj["cashflow_cumule_apres_impot"].iloc[-1]) if not df_proj.empty else 0.0
     )
@@ -3288,9 +3300,9 @@ with tab2:
 
     projection_card_specs = [
         (
-            "Equite an 10",
-            format_money(equite_an10),
-            f"Patrimoine accumule: valeur projetee {format_money(valeur_immeuble_an10)} moins solde du pret {format_money(solde_pret_an10)}.",
+            "Produit vente an 10",
+            format_money(produit_vente_an10),
+            f"Valeur projetee {format_money(valeur_immeuble_an10)} moins solde du financement {format_money(solde_pret_an10)}.",
             "positive",
         ),
         (
@@ -3414,40 +3426,46 @@ with tab2:
 
     with g2:
         fig_val = go.Figure()
+        annee_finale = int(df_proj["annee"].iloc[-1])
+        produit_mid_an10 = (valeur_immeuble_an10 + solde_pret_an10) / 2
         fig_val.add_trace(
             go.Scatter(
                 x=df_proj["annee"],
                 y=df_proj["valeur_immeuble"],
                 name="Valeur projetee",
                 line=dict(color="#005A9C", width=3),
-                fill="tozeroy",
-                fillcolor="rgba(0, 90, 156, 0.10)",
+                mode="lines+markers",
+                marker=dict(size=7, color="#005A9C"),
                 hovertemplate="Annee %{x}<br>Valeur: %{y:,.0f}$<extra></extra>",
             )
         )
         fig_val.add_trace(
             go.Scatter(
                 x=df_proj["annee"],
-                y=df_proj["equite"],
-                name="Equite estimee",
-                line=dict(color="#F59E0B", width=3),
-                hovertemplate="Annee %{x}<br>Equite: %{y:,.0f}$<extra></extra>",
+                y=df_proj["solde_pret"],
+                name="Solde du financement",
+                line=dict(color="#94A3B8", width=3),
+                mode="lines+markers",
+                marker=dict(size=7, color="#94A3B8"),
+                fill="tonexty",
+                fillcolor="rgba(245, 158, 11, 0.12)",
+                hovertemplate="Annee %{x}<br>Solde financement: %{y:,.0f}$<extra></extra>",
             )
         )
         fig_val.add_trace(
             go.Scatter(
-                x=[int(df_proj["annee"].iloc[-1])],
-                y=[produit_vente_an10],
-                mode="markers",
-                name="Produit vente an 10",
-                marker=dict(size=12, color="#F59E0B", line=dict(color="#FFFFFF", width=2)),
-                hovertemplate="Annee %{x}<br>Produit estime: %{y:,.0f}$<extra></extra>",
+                x=[annee_finale, annee_finale],
+                y=[solde_pret_an10, valeur_immeuble_an10],
+                mode="lines",
+                line=dict(color="#F59E0B", width=2, dash="dot"),
+                showlegend=False,
+                hoverinfo="skip",
             )
         )
         fig_val.add_annotation(
-            x=int(df_proj["annee"].iloc[-1]),
-            y=produit_vente_an10,
-            text=f"Produit an 10<br>{format_money(produit_vente_an10)}",
+            x=annee_finale,
+            y=produit_mid_an10,
+            text=f"Produit vente an 10<br>{format_money(produit_vente_an10)}",
             showarrow=True,
             arrowhead=2,
             arrowsize=1,
@@ -3455,9 +3473,11 @@ with tab2:
             bgcolor="#FFFFFF",
             bordercolor="#FCD34D",
             font=dict(color="#92400E", size=12),
+            ax=70,
+            ay=0,
         )
         fig_val.update_layout(
-            title="Valeur et equite estimees",
+            title="Valeur projetee et solde du financement",
             xaxis_title="Annee",
             yaxis_title="$",
             paper_bgcolor="rgba(0,0,0,0)",
