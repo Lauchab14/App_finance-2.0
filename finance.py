@@ -340,6 +340,56 @@ def _format_money(value: float) -> str:
     return f"{value:,.0f}$".replace(",", " ")
 
 
+def _safe_round(value: float | None, digits: int = 2):
+    if value is None or not isfinite(value):
+        return None
+    return round(value, digits)
+
+
+def _build_preview_metrics(prix: float, rne: float, paiement_annuel: float) -> dict:
+    cashflow_annuel = rne - paiement_annuel
+    cap_rate = ((rne / prix) * 100.0) if prix > 0 else None
+    csd = (rne / paiement_annuel) if paiement_annuel > 0 else None
+    return {
+        "cap_rate": _safe_round(cap_rate, 2),
+        "csd": _safe_round(csd, 2),
+        "cashflow_annuel": _safe_round(cashflow_annuel, 2),
+        "rne": _safe_round(rne, 2),
+    }
+
+
+def _build_action(
+    action_key: str,
+    label: str,
+    value: str,
+    note: str,
+    variant: str,
+    priority_rank: int,
+    priority_label: str,
+    impact_label: str,
+    feasibility_label: str,
+    raw_value=None,
+    scenario_title: str | None = None,
+    scenario_preview: dict | None = None,
+    state: str = "active",
+) -> dict:
+    return {
+        "action_key": action_key,
+        "label": label,
+        "value": value,
+        "note": note,
+        "variant": variant,
+        "priority_rank": priority_rank,
+        "priority_label": priority_label,
+        "impact_label": impact_label,
+        "feasibility_label": feasibility_label,
+        "raw_value": raw_value,
+        "scenario_title": scenario_title,
+        "scenario_preview": scenario_preview or {},
+        "state": state,
+    }
+
+
 def _status_score(status: str) -> int:
     scores = {
         "positive": 2,
@@ -635,39 +685,88 @@ def analyser_opportunite_investissement(
 
     if prix_achat > prix_max_recommande * 1.02:
         contre_offre = _arrondir_millier(prix_max_recommande * 0.98, mode="down")
-        counter_offer_action = {
-            "label": "Contre-offre suggeree",
-            "value": _format_money(contre_offre),
-            "variant": "negative",
-            "note": (
-                f"Le prix affiche depasse la zone defendable. Une approche autour de {_format_money(contre_offre)} "
-                f"laisse encore une marge avant le plafond recommande de {_format_money(prix_max_recommande)}."
+        discount_pct = ((prix_achat - contre_offre) / prix_achat * 100.0) if prix_achat > 0 else 0.0
+        paiement_annuel_contre_offre = (
+            paiement_annuel * (contre_offre / prix_achat) if prix_achat > 0 else paiement_annuel
+        )
+        counter_offer_action = _build_action(
+            action_key="counter_offer",
+            label="Contre-offre suggeree",
+            value=_format_money(contre_offre),
+            note=(
+                f"Ce niveau de prix ramene le dossier dans une zone plus defendable, "
+                f"sous le plafond recommande de {_format_money(prix_max_recommande)}."
             ),
-        }
-        max_price_action = {
-            "label": "Prix maximal recommande",
-            "value": _format_money(prix_max_recommande),
-            "variant": "warning",
-            "note": (
-                f"Plafond estime pour viser un cap rate cible de {target_cap_rate:.1f}% et un CSD cible de {target_csd:.2f}x. "
-                f"Le seuil limitant ici est le {binding_metric}."
+            variant="negative",
+            priority_rank=1,
+            priority_label="Action prioritaire",
+            impact_label="Eleve",
+            feasibility_label="Moyenne" if discount_pct <= 8.0 else "Faible a moyenne",
+            raw_value=contre_offre,
+            scenario_title=f"Apres contre-offre a {_format_money(contre_offre)}",
+            scenario_preview=_build_preview_metrics(
+                contre_offre,
+                rne,
+                paiement_annuel_contre_offre,
             ),
-        }
+            state="active",
+        )
+        max_price_action = _build_action(
+            action_key="max_price",
+            label="Prix maximal recommande",
+            value=_format_money(prix_max_recommande),
+            note=(
+                f"Plafond estime pour viser un cap rate cible de {target_cap_rate:.1f}% "
+                f"et un CSD cible de {target_csd:.2f}x. Le seuil limitant ici est le {binding_metric}."
+            ),
+            variant="warning",
+            priority_rank=4,
+            priority_label="Repere de negociation",
+            impact_label="Repere",
+            feasibility_label="N/A",
+            raw_value=prix_max_recommande,
+            scenario_title=f"Zone defendable jusqu'a {_format_money(prix_max_recommande)}",
+            scenario_preview=_build_preview_metrics(
+                prix_max_recommande,
+                rne,
+                paiement_annuel * (prix_max_recommande / prix_achat) if prix_achat > 0 else paiement_annuel,
+            ),
+            state="support",
+        )
     else:
-        counter_offer_action = {
-            "label": "Contre-offre suggeree",
-            "value": "Optionnelle",
-            "variant": "positive",
-            "note": "Le prix courant reste dans une zone defendable avec les seuils cibles retenus.",
-        }
-        max_price_action = {
-            "label": "Prix maximal recommande",
-            "value": _format_money(prix_max_recommande),
-            "variant": "positive",
-            "note": (
-                f"Le prix analyse reste compatible avec un cap rate cible de {target_cap_rate:.1f}% et un CSD cible de {target_csd:.2f}x."
+        counter_offer_action = _build_action(
+            action_key="counter_offer",
+            label="Contre-offre suggeree",
+            value="Optionnelle",
+            note="Le prix courant reste dans une zone defendable avec les seuils cibles retenus.",
+            variant="positive",
+            priority_rank=1,
+            priority_label="Action prioritaire",
+            impact_label="Faible",
+            feasibility_label="Elevee",
+            raw_value=prix_achat,
+            scenario_title="Prix deja dans la zone defendable",
+            scenario_preview=_build_preview_metrics(prix_achat, rne, paiement_annuel),
+            state="optional",
+        )
+        max_price_action = _build_action(
+            action_key="max_price",
+            label="Prix maximal recommande",
+            value=_format_money(prix_max_recommande),
+            note=(
+                f"Le prix analyse reste compatible avec un cap rate cible de {target_cap_rate:.1f}% "
+                f"et un CSD cible de {target_csd:.2f}x."
             ),
-        }
+            variant="positive",
+            priority_rank=4,
+            priority_label="Repere de negociation",
+            impact_label="Repere",
+            feasibility_label="N/A",
+            raw_value=prix_max_recommande,
+            scenario_title=f"Prix defendable jusqu'a {_format_money(prix_max_recommande)}",
+            scenario_preview=_build_preview_metrics(prix_max_recommande, rne, paiement_annuel),
+            state="support",
+        )
 
     if montant_pret > 0 and paiement_annuel > 0 and rne > 0:
         paiement_cible = rne / target_csd
@@ -679,29 +778,65 @@ def analyser_opportunite_investissement(
             nouvelle_mdf_pct = (
                 (nouvelle_mise_de_fonds / prix_achat * 100.0) if prix_achat > 0 else 0.0
             )
-            mise_de_fonds_action = {
-                "label": "Ajustement de mise de fonds",
-                "value": f"+{_format_money(apport_additionnel)}",
-                "variant": "warning" if apport_additionnel < mise_de_fonds * 0.35 else "negative",
-                "note": (
-                    f"Porter la mise de fonds a environ {_format_money(nouvelle_mise_de_fonds)} ({nouvelle_mdf_pct:.1f}%) "
-                    f"rapprocherait le dossier d'un CSD de {target_csd:.2f}x."
+            mise_feasibility = (
+                "Moyenne"
+                if apport_additionnel < mise_de_fonds * 0.35
+                else "Faible a moyenne"
+            )
+            mise_de_fonds_action = _build_action(
+                action_key="down_payment",
+                label="Mise de fonds additionnelle",
+                value=f"+{_format_money(apport_additionnel)}",
+                note=(
+                    f"Porter la mise de fonds totale a environ {_format_money(nouvelle_mise_de_fonds)} "
+                    f"({nouvelle_mdf_pct:.1f}%) rapprocherait le dossier d'un CSD de {target_csd:.2f}x."
                 ),
-            }
+                variant="warning" if apport_additionnel < mise_de_fonds * 0.35 else "negative",
+                priority_rank=2,
+                priority_label="Option alternative",
+                impact_label="Eleve",
+                feasibility_label=mise_feasibility,
+                raw_value=apport_additionnel,
+                scenario_title=f"Apres mise de fonds totale de {_format_money(nouvelle_mise_de_fonds)}",
+                scenario_preview=_build_preview_metrics(
+                    prix_achat,
+                    rne,
+                    paiement_annuel * (pret_cible / montant_pret) if montant_pret > 0 else 0.0,
+                ),
+                state="active",
+            )
         else:
-            mise_de_fonds_action = {
-                "label": "Ajustement de mise de fonds",
-                "value": "Non requis",
-                "variant": "positive",
-                "note": "La structure actuelle de mise de fonds est deja compatible avec le seuil de couverture cible.",
-            }
+            mise_de_fonds_action = _build_action(
+                action_key="down_payment",
+                label="Mise de fonds additionnelle",
+                value="Non requise",
+                note="La structure actuelle de mise de fonds est deja compatible avec le seuil de couverture cible.",
+                variant="positive",
+                priority_rank=2,
+                priority_label="Option alternative",
+                impact_label="Faible",
+                feasibility_label="Elevee",
+                raw_value=0.0,
+                scenario_title="Structure de capital deja adequate",
+                scenario_preview=_build_preview_metrics(prix_achat, rne, paiement_annuel),
+                state="optional",
+            )
     else:
-        mise_de_fonds_action = {
-            "label": "Ajustement de mise de fonds",
-            "value": "N/A",
-            "variant": "neutral",
-            "note": "Impossible d'estimer un ajustement fiable avec les donnees actuelles.",
-        }
+        mise_de_fonds_action = _build_action(
+            action_key="down_payment",
+            label="Mise de fonds additionnelle",
+            value="N/A",
+            note="Impossible d'estimer un ajustement fiable avec les donnees actuelles.",
+            variant="neutral",
+            priority_rank=2,
+            priority_label="Option alternative",
+            impact_label="Indetermine",
+            feasibility_label="Indeterminee",
+            raw_value=None,
+            scenario_title="Scenario non calculable",
+            scenario_preview={},
+            state="unavailable",
+        )
 
     facteur_occupation = max(0.0, 1.0 - (taux_vacance / 100.0))
     loyer_cible_total = None
@@ -723,45 +858,74 @@ def analyser_opportunite_investissement(
         )
 
     if loyer_cible_total is None:
-        loyers_action = {
-            "label": "Potentiel d'optimisation des loyers",
-            "value": "N/A",
-            "variant": "neutral",
-            "note": "Le calcul n'est pas interpretable avec un taux de vacance de 100%.",
-        }
+        loyers_action = _build_action(
+            action_key="rent_optimization",
+            label="Optimisation potentielle des loyers",
+            value="N/A",
+            note="Le calcul n'est pas interpretable avec un taux de vacance de 100%.",
+            variant="neutral",
+            priority_rank=3,
+            priority_label="Option plus difficile",
+            impact_label="Indetermine",
+            feasibility_label="Indeterminee",
+            raw_value=None,
+            scenario_title="Scenario locatif non calculable",
+            scenario_preview={},
+            state="unavailable",
+        )
         tal_warning = {
             "variant": "warning",
             "message": "Le scenario TAL n'a pas pu etre evalue correctement avec les donnees actuelles.",
         }
     elif hausse_loyers_total <= 0:
-        loyers_action = {
-            "label": "Potentiel d'optimisation des loyers",
-            "value": "Aucune hausse requise",
-            "variant": "positive",
-            "note": (
+        loyers_action = _build_action(
+            action_key="rent_optimization",
+            label="Optimisation potentielle des loyers",
+            value="Aucune hausse requise",
+            note=(
                 f"Les loyers actuels couvrent deja un objectif de CSD de {target_csd:.2f}x. "
                 f"Le loyer cible estime est d'environ {_format_money(loyer_cible_total)}/mois."
             ),
-        }
-        tal_warning = {
-            "variant": "positive",
-            "message": "Aucune pression immediate de hausse n'apparait. Le risque operationnel lie au TAL reste donc plus limite.",
-        }
+            variant="positive",
+            priority_rank=3,
+            priority_label="Option plus difficile",
+            impact_label="Faible",
+            feasibility_label="Elevee",
+            raw_value=0.0,
+            scenario_title="Niveau de loyer deja adequate",
+            scenario_preview=_build_preview_metrics(prix_achat, rne, paiement_annuel),
+            state="optional",
+        )
+        tal_warning = None
     else:
         hausse_par_logement_str = (
             f", soit environ +{_format_money(hausse_loyer_par_logement)}/logement/mois"
             if hausse_loyer_par_logement is not None
             else ""
         )
-        loyers_action = {
-            "label": "Potentiel d'optimisation des loyers",
-            "value": f"+{_format_money(hausse_loyers_total)}/mois",
-            "variant": "warning" if (hausse_loyers_pct or 0.0) <= 5.0 else "negative",
-            "note": (
+        rne_apres_hausse = rne + (hausse_loyers_total * 12.0 * facteur_occupation)
+        loyers_action = _build_action(
+            action_key="rent_optimization",
+            label="Optimisation potentielle des loyers",
+            value=f"+{_format_money(hausse_loyers_total)}/mois",
+            note=(
                 f"Pour viser un CSD de {target_csd:.2f}x, il faudrait environ +{_format_money(hausse_loyers_total)}/mois"
                 f"{hausse_par_logement_str}."
             ),
-        }
+            variant="warning" if (hausse_loyers_pct or 0.0) <= 5.0 else "negative",
+            priority_rank=3,
+            priority_label="Option plus difficile",
+            impact_label="Moyen" if (hausse_loyers_pct or 0.0) <= 5.0 else "Eleve",
+            feasibility_label=(
+                "Moyenne"
+                if (hausse_loyers_pct or 0.0) <= 5.0 and (hausse_loyer_par_logement or 0.0) < 75.0
+                else "Faible / prudence"
+            ),
+            raw_value=hausse_loyers_total,
+            scenario_title=f"Apres hausse de loyers de +{_format_money(hausse_loyers_total)}/mois",
+            scenario_preview=_build_preview_metrics(prix_achat, rne_apres_hausse, paiement_annuel),
+            state="active",
+        )
 
         if (hausse_loyers_pct or 0.0) >= 10.0 or (hausse_loyer_par_logement or 0.0) >= 100.0:
             tal_warning = {
@@ -805,7 +969,7 @@ def analyser_opportunite_investissement(
         "strengths": strengths,
         "risks": risks,
         "actions": actions,
-        "alerts": [tal_warning],
+        "alerts": [alert for alert in [tal_warning] if alert],
         "targets": {
             "cap_rate": target_cap_rate,
             "csd": target_csd,

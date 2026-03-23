@@ -40,12 +40,21 @@ from finance import (
     calculer_taxes_municipales,
     calculer_taxes_scolaires,
 )
+from ai_recommendation import enrich_analysis_with_ai
 from location import calculer_score_localisation_avance
 from geocoding import verifier_adresse, rechercher_adresses, determiner_region_gps, obtenir_tous_services, obtenir_loisirs_ville
 from demographie import analyser_demographie
 from dotenv import load_dotenv
 
 load_dotenv()
+
+AI_RECOMMENDATION_CACHE_VERSION = "2026-03-23-gemini-premium-v2"
+
+
+@st.cache_data(show_spinner=False, ttl=900)
+def get_recommendation_analysis(base_analysis, dossier_context, cache_version):
+    _ = cache_version
+    return enrich_analysis_with_ai(base_analysis, dossier_context)
 
 # =============================================================================
 # CONFIGURATION DE LA PAGE
@@ -209,6 +218,872 @@ st.markdown(
         font-size: 0.84rem;
         color: #475569;
         line-height: 1.35;
+    }
+    .ai-insight-shell {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FBFF 100%);
+        border: 1px solid #D8E2EE;
+        border-radius: 20px;
+        padding: 1.1rem 1.15rem;
+        margin-top: 1rem;
+        box-shadow: 0 12px 28px rgba(15, 23, 42, 0.06);
+    }
+    .ai-insight-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        margin-bottom: 0.9rem;
+    }
+    .ai-insight-kicker {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+    }
+    .ai-insight-title {
+        font-size: 1.15rem;
+        color: #002A54;
+        font-weight: 900;
+        margin-top: 0.18rem;
+    }
+    .ai-insight-pill {
+        padding: 0.42rem 0.8rem;
+        border-radius: 999px;
+        background: #E2EDF8;
+        color: #234361;
+        font-size: 0.78rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .ai-insight-summary {
+        background: linear-gradient(135deg, #002A54 0%, #005A9C 100%);
+        color: #FFFFFF;
+        border-radius: 18px;
+        padding: 1rem 1.1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 10px 24px rgba(0, 42, 84, 0.16);
+    }
+    .ai-insight-summary-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        opacity: 0.82;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .ai-insight-summary-text {
+        font-size: 0.98rem;
+        line-height: 1.55;
+    }
+    .ai-list-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 16px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+    .ai-list-card.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .ai-list-card.warning {
+        border-top: 4px solid #D97706;
+    }
+    .ai-list-card.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .ai-list-card .title {
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.7rem;
+    }
+    .ai-list-card ul {
+        margin: 0;
+        padding-left: 1.1rem;
+        color: #334155;
+    }
+    .ai-list-card li {
+        margin-bottom: 0.48rem;
+        line-height: 1.42;
+    }
+    .ai-list-card .empty {
+        color: #64748B;
+        font-size: 0.86rem;
+        line-height: 1.4;
+    }
+    .ai-detail-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 16px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+    .ai-detail-card.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .ai-detail-card.warning {
+        border-top: 4px solid #D97706;
+    }
+    .ai-detail-card.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .ai-detail-card .eyebrow {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.35rem;
+    }
+    .ai-detail-card .title {
+        font-size: 0.9rem;
+        color: #0F172A;
+        font-weight: 800;
+        margin-bottom: 0.45rem;
+    }
+    .ai-detail-card .body {
+        color: #334155;
+        font-size: 0.92rem;
+        line-height: 1.5;
+    }
+    .ai-block-heading {
+        margin: 1rem 0 0.7rem;
+    }
+    .ai-block-kicker {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.15rem;
+    }
+    .ai-block-title {
+        font-size: 1.05rem;
+        font-weight: 900;
+        color: #0F172A;
+    }
+    .ai-block-caption {
+        margin-top: 0.18rem;
+        color: #64748B;
+        font-size: 0.86rem;
+    }
+    .ai-summary-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%);
+        border: 1px solid #D8E2EE;
+        border-radius: 18px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+    }
+    .ai-summary-top {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.7rem;
+    }
+    .ai-summary-subtitle {
+        font-size: 0.8rem;
+        font-weight: 800;
+        color: #46627F;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+    }
+    .ai-summary-provider {
+        padding: 0.38rem 0.75rem;
+        border-radius: 999px;
+        background: #E8F0F8;
+        color: #234361;
+        font-size: 0.78rem;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .ai-summary-text {
+        color: #1F2937;
+        font-size: 0.98rem;
+        line-height: 1.58;
+    }
+    .ai-thesis-row {
+        margin-top: 0.8rem;
+        padding-top: 0.8rem;
+        border-top: 1px solid #E8EEF6;
+        display: flex;
+        gap: 0.55rem;
+        align-items: baseline;
+        flex-wrap: wrap;
+    }
+    .ai-thesis-label {
+        color: #46627F;
+        font-size: 0.82rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+    }
+    .ai-thesis-value {
+        color: #334155;
+        font-size: 0.92rem;
+        line-height: 1.5;
+        flex: 1 1 240px;
+    }
+    .ai-verdict-card {
+        background: #FFFFFF;
+        border: 1px solid #D8E2EE;
+        border-radius: 22px;
+        padding: 1.2rem 1.2rem 1.1rem;
+        box-shadow: 0 8px 22px rgba(15, 23, 42, 0.05);
+    }
+    .ai-verdict-layout {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(260px, 0.9fr);
+        gap: 1.4rem;
+        align-items: center;
+    }
+    .ai-verdict-copy {
+        min-width: 0;
+    }
+    .ai-verdict-card.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .ai-verdict-card.warning {
+        border-top: 4px solid #D97706;
+    }
+    .ai-verdict-card.negative {
+        border-top: 4px solid #DC2626;
+    }
+    .ai-verdict-card.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .ai-verdict-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        margin-bottom: 0.6rem;
+    }
+    .ai-verdict-kicker {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.2rem;
+    }
+    .ai-verdict-title {
+        font-size: 2rem;
+        line-height: 1.02;
+        font-weight: 900;
+        color: #0F172A;
+        max-width: 28rem;
+    }
+    .ai-verdict-badges {
+        display: flex;
+        gap: 0.45rem;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+    }
+    .ai-verdict-pill {
+        padding: 0.36rem 0.72rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 800;
+        white-space: nowrap;
+        border: 1px solid transparent;
+    }
+    .ai-verdict-pill.positive {
+        background: #F0FDF4;
+        border-color: #BBF7D0;
+        color: #166534;
+    }
+    .ai-verdict-pill.warning {
+        background: #FFFBEB;
+        border-color: #FDE68A;
+        color: #9A6700;
+    }
+    .ai-verdict-pill.negative {
+        background: #FEF2F2;
+        border-color: #FECACA;
+        color: #991B1B;
+    }
+    .ai-verdict-pill.neutral {
+        background: #EFF6FF;
+        border-color: #BFDBFE;
+        color: #234361;
+    }
+    .ai-verdict-reason {
+        color: #334155;
+        font-size: 0.95rem;
+        line-height: 1.48;
+        max-width: 46rem;
+    }
+    .ai-verdict-visual {
+        border-left: 1px solid #EDF2F7;
+        padding-left: 1.2rem;
+    }
+    .ai-verdict-visual-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+        margin-bottom: 0.8rem;
+    }
+    .ai-verdict-approach {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 0.85rem;
+        align-items: end;
+    }
+    .ai-verdict-track-shell {
+        position: relative;
+        min-height: 4.6rem;
+    }
+    .ai-verdict-lane {
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 2.55rem;
+        height: 4px;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #F3D1D1 0%, #F4E8C8 48%, #CFEAD6 100%);
+    }
+    .ai-verdict-pointer {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.15rem;
+        z-index: 2;
+    }
+    .ai-verdict-pointer-tag {
+        color: #475569;
+        font-size: 0.68rem;
+        line-height: 1;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .ai-verdict-pointer-arrow {
+        font-size: 1.08rem;
+        line-height: 1;
+        font-weight: 900;
+    }
+    .ai-verdict-pointer.positive .ai-verdict-pointer-arrow {
+        color: #16A34A;
+    }
+    .ai-verdict-pointer.warning .ai-verdict-pointer-arrow {
+        color: #D97706;
+    }
+    .ai-verdict-pointer.negative .ai-verdict-pointer-arrow {
+        color: #DC2626;
+    }
+    .ai-verdict-pointer.neutral .ai-verdict-pointer-arrow {
+        color: #005A9C;
+    }
+    .ai-verdict-building {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.35rem;
+        min-width: 3.8rem;
+    }
+    .ai-verdict-building-body {
+        width: 2.9rem;
+        height: 4.2rem;
+        border-radius: 0.95rem 0.95rem 0.55rem 0.55rem;
+        border: 1px solid #CAD8E6;
+        background: #F8FBFE;
+        padding: 0.55rem 0.48rem 0.75rem;
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.22rem;
+        position: relative;
+    }
+    .ai-verdict-building-body span {
+        display: block;
+        height: 0.5rem;
+        border-radius: 0.22rem;
+        background: #EEF4FA;
+        border: 1px solid #DCE8F3;
+    }
+    .ai-verdict-building-door {
+        position: absolute;
+        left: 50%;
+        bottom: 0;
+        transform: translateX(-50%);
+        width: 0.72rem;
+        height: 0.95rem;
+        border-radius: 0.38rem 0.38rem 0 0;
+        background: #6B85A1;
+    }
+    .ai-verdict-building-label {
+        color: #64748B;
+        font-size: 0.66rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 800;
+        white-space: nowrap;
+    }
+    .ai-verdict-scale-line {
+        display: flex;
+        justify-content: space-between;
+        gap: 0.65rem;
+        margin-top: 0.55rem;
+        color: #94A3B8;
+        font-size: 0.7rem;
+        font-weight: 800;
+    }
+    .ai-verdict-scale-label.active {
+        color: #0F172A;
+    }
+    .ai-verdict-scale-label.active.positive {
+        color: #166534;
+    }
+    .ai-verdict-scale-label.active.warning {
+        color: #9A6700;
+    }
+    .ai-verdict-scale-label.active.negative {
+        color: #991B1B;
+    }
+    .ai-verdict-scale-label.active.neutral {
+        color: #234361;
+    }
+    .ai-verdict-visual-caption {
+        margin-top: 0.6rem;
+        color: #475569;
+        font-size: 0.82rem;
+        line-height: 1.42;
+        max-width: 22rem;
+    }
+    .ai-verdict-flow-shell {
+        margin-bottom: 1.1rem;
+    }
+    .ai-verdict-flow-guide {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        margin-top: 0.8rem;
+    }
+    .ai-verdict-flow-arrow {
+        width: 2.65rem;
+        height: 2.65rem;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(180deg, #FFF8E1 0%, #FDE68A 100%);
+        border: 1px solid #F4D08B;
+        color: #9A6700;
+        font-size: 1.4rem;
+        font-weight: 900;
+        box-shadow: 0 10px 22px rgba(154, 103, 0, 0.12);
+    }
+    .ai-verdict-flow-text {
+        text-align: center;
+        color: #64748B;
+        font-size: 0.82rem;
+        line-height: 1.4;
+        font-weight: 700;
+        max-width: 34rem;
+    }
+    .ai-diagnostic-card {
+        background: #FFFFFF;
+        border: 1px solid #E2E8F0;
+        border-radius: 18px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+    .ai-diagnostic-card.positive {
+        border-left: 4px solid #16A34A;
+    }
+    .ai-diagnostic-card.warning {
+        border-left: 4px solid #D97706;
+    }
+    .ai-diagnostic-card.negative {
+        border-left: 4px solid #DC2626;
+    }
+    .ai-diagnostic-card .title {
+        font-size: 0.92rem;
+        color: #0F172A;
+        font-weight: 900;
+        margin-bottom: 0.15rem;
+    }
+    .ai-diagnostic-card .subtitle {
+        color: #64748B;
+        font-size: 0.82rem;
+        margin-bottom: 0.7rem;
+    }
+    .ai-metric-row {
+        display: flex;
+        gap: 0.8rem;
+        padding: 0.8rem 0;
+        border-top: 1px solid #EEF2F7;
+    }
+    .ai-metric-row:first-child {
+        border-top: none;
+        padding-top: 0.15rem;
+    }
+    .ai-metric-icon {
+        width: 0.72rem;
+        height: 0.72rem;
+        border-radius: 999px;
+        margin-top: 0.42rem;
+        flex: 0 0 auto;
+    }
+    .ai-metric-row.positive .ai-metric-icon {
+        background: #16A34A;
+        box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.10);
+    }
+    .ai-metric-row.warning .ai-metric-icon {
+        background: #D97706;
+        box-shadow: 0 0 0 5px rgba(217, 119, 6, 0.10);
+    }
+    .ai-metric-row.negative .ai-metric-icon {
+        background: #DC2626;
+        box-shadow: 0 0 0 5px rgba(220, 38, 38, 0.10);
+    }
+    .ai-metric-content {
+        flex: 1 1 auto;
+    }
+    .ai-metric-line {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        gap: 1rem;
+        flex-wrap: wrap;
+    }
+    .ai-metric-name {
+        font-size: 0.9rem;
+        font-weight: 800;
+        color: #0F172A;
+    }
+    .ai-metric-value {
+        font-size: 1rem;
+        font-weight: 900;
+        color: #002A54;
+        white-space: nowrap;
+    }
+    .ai-metric-row.negative .ai-metric-value {
+        color: #B91C1C;
+    }
+    .ai-metric-row.warning .ai-metric-value {
+        color: #B45309;
+    }
+    .ai-metric-note {
+        margin-top: 0.18rem;
+        color: #475569;
+        font-size: 0.84rem;
+        line-height: 1.42;
+    }
+    .ai-metric-empty {
+        color: #64748B;
+        font-size: 0.86rem;
+        line-height: 1.45;
+        padding-top: 0.2rem;
+    }
+    .ai-plan-card {
+        background: linear-gradient(180deg, #FFFFFF 0%, #FBFDFF 100%);
+        border: 1px solid #D8E2EE;
+        border-radius: 18px;
+        padding: 1rem 1.05rem;
+        box-shadow: 0 10px 24px rgba(15, 23, 42, 0.05);
+        height: 100%;
+    }
+    .ai-plan-card.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .ai-plan-card.warning {
+        border-top: 4px solid #D97706;
+    }
+    .ai-plan-card.negative {
+        border-top: 4px solid #DC2626;
+    }
+    .ai-plan-card.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .ai-plan-top {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        margin-bottom: 0.75rem;
+    }
+    .ai-plan-rank {
+        width: 1.9rem;
+        height: 1.9rem;
+        border-radius: 999px;
+        background: #0F172A;
+        color: #FFFFFF;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 900;
+        font-size: 0.86rem;
+        flex: 0 0 auto;
+    }
+    .ai-plan-priority {
+        color: #46627F;
+        font-size: 0.78rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        font-weight: 800;
+    }
+    .ai-plan-title {
+        color: #0F172A;
+        font-size: 0.96rem;
+        font-weight: 900;
+        margin-bottom: 0.2rem;
+    }
+    .ai-plan-value {
+        color: #002A54;
+        font-size: 1.85rem;
+        line-height: 1.05;
+        font-weight: 900;
+        margin-bottom: 0.55rem;
+    }
+    .ai-plan-card.negative .ai-plan-value {
+        color: #B91C1C;
+    }
+    .ai-plan-card.warning .ai-plan-value {
+        color: #B45309;
+    }
+    .ai-plan-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        margin-bottom: 0.7rem;
+    }
+    .ai-plan-chip {
+        padding: 0.32rem 0.7rem;
+        border-radius: 999px;
+        background: #F1F5F9;
+        color: #334155;
+        font-size: 0.76rem;
+        font-weight: 800;
+    }
+    .ai-plan-state {
+        color: #64748B;
+        font-size: 0.78rem;
+        font-weight: 700;
+        margin-bottom: 0.45rem;
+    }
+    .ai-plan-note {
+        color: #475569;
+        font-size: 0.88rem;
+        line-height: 1.45;
+    }
+    .ai-preview-shell {
+        background: linear-gradient(135deg, #0F172A 0%, #1E3A5F 100%);
+        border-radius: 20px;
+        padding: 1rem 1.05rem;
+        color: #FFFFFF;
+        box-shadow: 0 14px 30px rgba(15, 23, 42, 0.14);
+    }
+    .ai-preview-kicker {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        font-weight: 800;
+        opacity: 0.78;
+        margin-bottom: 0.25rem;
+    }
+    .ai-preview-title {
+        font-size: 1.08rem;
+        font-weight: 900;
+        margin-bottom: 0.18rem;
+    }
+    .ai-preview-note {
+        color: rgba(255, 255, 255, 0.82);
+        font-size: 0.86rem;
+        line-height: 1.45;
+    }
+    .ai-preview-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.75rem;
+        margin-top: 0.9rem;
+    }
+    .ai-preview-metric {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 16px;
+        padding: 0.8rem 0.9rem;
+        backdrop-filter: blur(8px);
+    }
+    .ai-preview-metric-label {
+        font-size: 0.74rem;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: rgba(255, 255, 255, 0.72);
+        font-weight: 800;
+        margin-bottom: 0.22rem;
+    }
+    .ai-preview-metric-value {
+        font-size: 1.25rem;
+        font-weight: 900;
+        color: #FFFFFF;
+        line-height: 1.1;
+    }
+    @media (max-width: 900px) {
+        .ai-verdict-layout {
+            grid-template-columns: 1fr;
+        }
+        .ai-verdict-title {
+            font-size: 1.65rem;
+            max-width: none;
+        }
+        .ai-verdict-badges {
+            justify-content: flex-start;
+        }
+        .ai-verdict-visual {
+            border-left: none;
+            border-top: 1px solid #EDF2F7;
+            padding-left: 0;
+            padding-top: 1rem;
+        }
+        .ai-plan-value {
+            font-size: 1.55rem;
+        }
+        .ai-summary-provider {
+            white-space: normal;
+        }
+    }
+    .decision-meter-shell {
+        background: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+        border: 1px solid #E2E8F0;
+        border-radius: 18px;
+        padding: 1rem 1rem 1.1rem;
+        margin-bottom: 1rem;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.05);
+    }
+    .decision-meter-shell.positive {
+        border-top: 4px solid #16A34A;
+    }
+    .decision-meter-shell.warning {
+        border-top: 4px solid #D97706;
+    }
+    .decision-meter-shell.negative {
+        border-top: 4px solid #DC2626;
+    }
+    .decision-meter-shell.neutral {
+        border-top: 4px solid #005A9C;
+    }
+    .decision-meter-header {
+        margin-bottom: 0.75rem;
+    }
+    .decision-meter-kicker {
+        font-size: 0.76rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #64748B;
+        font-weight: 800;
+    }
+    .decision-meter-title {
+        font-size: 1rem;
+        font-weight: 800;
+        color: #002A54;
+        margin-top: 0.2rem;
+    }
+    .decision-meter {
+        position: relative;
+        padding-top: 3.35rem;
+    }
+    .decision-meter-arrow {
+        position: absolute;
+        top: 0;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        pointer-events: none;
+        z-index: 2;
+    }
+    .decision-meter-badge {
+        background: #0F172A;
+        color: #FFFFFF;
+        padding: 0.35rem 0.75rem;
+        border-radius: 999px;
+        font-size: 0.76rem;
+        font-weight: 800;
+        line-height: 1;
+        white-space: nowrap;
+        box-shadow: 0 8px 18px rgba(15, 23, 42, 0.15);
+    }
+    .decision-meter-arrow-line {
+        width: 4px;
+        height: 1.5rem;
+        border-radius: 999px;
+        background: #0F172A;
+        margin-top: 0.2rem;
+    }
+    .decision-meter-arrow-head {
+        width: 0;
+        height: 0;
+        border-left: 10px solid transparent;
+        border-right: 10px solid transparent;
+        border-top: 14px solid #0F172A;
+        margin-top: -1px;
+    }
+    .decision-meter-track {
+        display: flex;
+        border-radius: 999px;
+        overflow: hidden;
+        border: 1px solid #D8E2EE;
+        box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+    }
+    .decision-meter-segment {
+        flex: 1 1 0;
+        min-height: 4.5rem;
+        display: flex;
+        align-items: end;
+        justify-content: center;
+        text-align: center;
+        padding: 0.8rem 0.45rem 0.7rem;
+        font-size: 0.82rem;
+        font-weight: 800;
+        line-height: 1.2;
+    }
+    .decision-meter-segment.negative {
+        background: linear-gradient(180deg, #FEE2E2 0%, #FECACA 100%);
+        color: #7F1D1D;
+    }
+    .decision-meter-segment.warning {
+        background: linear-gradient(180deg, #FEF3C7 0%, #FDE68A 100%);
+        color: #854D0E;
+        border-left: 1px solid rgba(255, 255, 255, 0.7);
+        border-right: 1px solid rgba(255, 255, 255, 0.7);
+    }
+    .decision-meter-segment.positive {
+        background: linear-gradient(180deg, #DCFCE7 0%, #BBF7D0 100%);
+        color: #166534;
+    }
+    .decision-meter-caption {
+        margin-top: 0.8rem;
+        text-align: center;
+        font-size: 0.88rem;
+        color: #475569;
+    }
+    @media (max-width: 900px) {
+        .decision-meter {
+            padding-top: 3.8rem;
+        }
+        .decision-meter-badge {
+            font-size: 0.7rem;
+            padding: 0.3rem 0.6rem;
+        }
+        .decision-meter-segment {
+            min-height: 4.8rem;
+            font-size: 0.75rem;
+            padding-left: 0.3rem;
+            padding-right: 0.3rem;
+        }
     }
 
     .projection-table-shell {
@@ -997,6 +1872,513 @@ def decision_card_html(label, value, note, variant="neutral"):
         f'<div class="label">{escape(label)}</div>'
         f'<div class="value">{escape(value)}</div>'
         f'<div class="note">{escape(note)}</div>'
+        '</div>'
+    )
+
+
+def decision_meter_html(verdict_value, variant="neutral"):
+    pointer_positions = {
+        "negative": 16,
+        "warning": 50,
+        "positive": 84,
+        "neutral": 50,
+    }
+    zone_labels = {
+        "negative": "Pas un bon achat",
+        "warning": "Sous conditions",
+        "positive": "Bon achat",
+        "neutral": "A analyser",
+    }
+
+    pointer_position = pointer_positions.get(variant, 50)
+    current_zone = zone_labels.get(variant, "A analyser")
+
+    return (
+        f'<div class="decision-meter-shell {variant}">'
+        f'<div class="decision-meter-header">'
+        f'<div class="decision-meter-kicker">Lecture visuelle</div>'
+        f'<div class="decision-meter-title">Positionnement rapide de l\'immeuble</div>'
+        f'</div>'
+        f'<div class="decision-meter">'
+        f'<div class="decision-meter-arrow" style="left:{pointer_position}%;">'
+        f'<div class="decision-meter-badge">{escape(current_zone)}</div>'
+        f'<div class="decision-meter-arrow-line"></div>'
+        f'<div class="decision-meter-arrow-head"></div>'
+        f'</div>'
+        f'<div class="decision-meter-track">'
+        f'<div class="decision-meter-segment negative">Pas un bon achat</div>'
+        f'<div class="decision-meter-segment warning">Sous conditions</div>'
+        f'<div class="decision-meter-segment positive">Bon achat</div>'
+        f'</div>'
+        f'</div>'
+        f'<div class="decision-meter-caption">Verdict actuel : <strong>{escape(verdict_value)}</strong></div>'
+        f'</div>'
+    )
+
+
+def ai_summary_banner_html(provider, model, summary):
+    provider_label = provider or "Gemini"
+    model_label = model or "modele non precise"
+    summary_text = summary or "Lecture IA disponible pour completer l'analyse locale."
+    return (
+        '<div class="ai-insight-shell">'
+        '<div class="ai-insight-header">'
+        '<div>'
+        '<div class="ai-insight-kicker">Lecture complementaire</div>'
+        '<div class="ai-insight-title">Lecture IA Gemini</div>'
+        '</div>'
+        f'<div class="ai-insight-pill">{escape(provider_label)} | {escape(model_label)}</div>'
+        '</div>'
+        '<div class="ai-insight-summary">'
+        '<div class="ai-insight-summary-label">Synthese Gemini</div>'
+        f'<div class="ai-insight-summary-text">{escape(summary_text)}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def ai_list_card_html(title, items, variant="neutral", empty_message="Aucun point n'a ete remonte."):
+    if items:
+        list_items = "".join(f"<li>{escape(item)}</li>" for item in items)
+        body = f"<ul>{list_items}</ul>"
+    else:
+        body = f'<div class="empty">{escape(empty_message)}</div>'
+
+    return (
+        f'<div class="ai-list-card {variant}">'
+        f'<div class="title">{escape(title)}</div>'
+        f"{body}"
+        '</div>'
+    )
+
+
+def ai_detail_card_html(title, body, variant="neutral", eyebrow=None):
+    eyebrow_html = (
+        f'<div class="eyebrow">{escape(eyebrow)}</div>'
+        if eyebrow
+        else ""
+    )
+    return (
+        f'<div class="ai-detail-card {variant}">'
+        f"{eyebrow_html}"
+        f'<div class="title">{escape(title)}</div>'
+        f'<div class="body">{escape(body)}</div>'
+        '</div>'
+    )
+
+
+def render_action_cards(actions):
+    action_rows = [actions[:2], actions[2:]]
+    for action_row in action_rows:
+        if not action_row:
+            continue
+        action_cols = st.columns(2, gap="large")
+        for col, action in zip(action_cols, action_row):
+            with col:
+                st.markdown(
+                    decision_card_html(
+                        action["label"],
+                        action["value"],
+                        action["note"],
+                        action["variant"],
+                    ),
+                    unsafe_allow_html=True,
+                )
+
+
+def normalize_text_block(text):
+    return " ".join((text or "").replace("\n", " ").split())
+
+
+def excerpt_sentences(text, max_sentences=2):
+    cleaned = normalize_text_block(text)
+    if not cleaned:
+        return ""
+
+    parts = []
+    for chunk in cleaned.split(". "):
+        piece = chunk.strip()
+        if not piece:
+            continue
+        if piece[-1] not in ".!?":
+            piece = f"{piece}."
+        parts.append(piece)
+        if len(parts) >= max_sentences:
+            break
+    return " ".join(parts) if parts else cleaned
+
+
+def verdict_presentation(variant, fallback_value=""):
+    mapping = {
+        "positive": {
+            "title": "Achat recommande",
+            "risk": "Risque faible",
+            "badge": "Lecture favorable",
+        },
+        "warning": {
+            "title": "Achetable sous conditions",
+            "risk": "Risque modere",
+            "badge": "Sous conditions",
+        },
+        "negative": {
+            "title": "A renegocier",
+            "risk": "Risque eleve",
+            "badge": "Point de rupture",
+        },
+        "neutral": {
+            "title": fallback_value or "A analyser",
+            "risk": "Risque a confirmer",
+            "badge": "Analyse en cours",
+        },
+    }
+    meta = mapping.get(variant, mapping["neutral"]).copy()
+    if fallback_value and variant in {"warning", "negative"}:
+        meta["title"] = fallback_value
+    return meta
+
+
+def verdict_positioning_meta(variant):
+    mapping = {
+        "positive": {
+            "position_pct": 74,
+            "caption": "Le dossier se place dans une zone d'achat defendable aux conditions actuelles.",
+            "active_scale": "positive",
+        },
+        "warning": {
+            "position_pct": 48,
+            "caption": "Le dossier reste envisageable, mais avec des ajustements avant de s'engager.",
+            "active_scale": "warning",
+        },
+        "negative": {
+            "position_pct": 22,
+            "caption": "Le dossier reste trop loin d'une zone d'achat confortable au prix actuel.",
+            "active_scale": "negative",
+        },
+        "neutral": {
+            "position_pct": 34,
+            "caption": "Le positionnement reste a confirmer avant de se prononcer definitivement.",
+            "active_scale": "neutral",
+        },
+    }
+    return mapping.get(variant, mapping["neutral"])
+
+
+def format_diagnostic_value(value, kind):
+    if value is None:
+        return "N/A"
+    if kind == "money":
+        return format_money(value)
+    if kind == "money_year":
+        formatted = format_money(abs(value))
+        return f"-{formatted}/an" if value < 0 else f"{formatted}/an"
+    if kind == "pct":
+        return f"{value:.2f} %"
+    if kind == "multiple":
+        return f"{value:.2f}x"
+    return str(value)
+
+
+def build_diagnostic_sections(ratios, analyse_locale, cashflow_annuel):
+    review_map = analyse_locale.get("ratio_reviews", {})
+    positive = []
+    vigilance = []
+
+    def maybe_add(entries, key, label, kind, tone_filter):
+        review = review_map.get(key)
+        value = ratios.get(key)
+        if not review or value is None:
+            return
+        status = review.get("status", "neutral")
+        if status not in tone_filter:
+            return
+        entries.append(
+            {
+                "tone": "positive" if status == "positive" else ("negative" if status == "negative" else "warning"),
+                "label": label,
+                "value": format_diagnostic_value(value, kind),
+                "note": excerpt_sentences(review.get("interpretation", review.get("headline", "")), 1),
+            }
+        )
+
+    for key, label, kind in [
+        ("cap_rate", "Cap rate", "pct"),
+        ("tri", "TRI", "pct"),
+        ("van", "VAN", "money"),
+        ("cash_on_cash", "Cash-on-cash", "pct"),
+    ]:
+        maybe_add(positive, key, label, kind, {"positive"})
+
+    if cashflow_annuel >= 0:
+        positive.append(
+            {
+                "tone": "positive",
+                "label": "Cashflow",
+                "value": format_diagnostic_value(cashflow_annuel, "money_year"),
+                "note": "Le projet degage encore un surplus annuel apres service de la dette.",
+            }
+        )
+
+    for key, label, kind in [
+        ("csd", "CSD", "multiple"),
+        ("cash_on_cash", "Cash-on-cash", "pct"),
+        ("mrb", "MRB", "multiple"),
+        ("cap_rate", "Cap rate", "pct"),
+        ("tri", "TRI", "pct"),
+        ("van", "VAN", "money"),
+    ]:
+        maybe_add(vigilance, key, label, kind, {"warning", "negative"})
+
+    if cashflow_annuel < 0:
+        vigilance.insert(
+            1 if vigilance else 0,
+            {
+                "tone": "negative",
+                "label": "Cashflow",
+                "value": format_diagnostic_value(cashflow_annuel, "money_year"),
+                "note": "Le dossier demande encore un effort investisseur apres le service de la dette.",
+            },
+        )
+
+    return positive[:4], vigilance[:4]
+
+
+def ai_block_heading_html(kicker, title, caption=""):
+    kicker_html = (
+        f'<div class="ai-block-kicker">{escape(kicker)}</div>'
+        if kicker
+        else ""
+    )
+    caption_html = (
+        f'<div class="ai-block-caption">{escape(caption)}</div>'
+        if caption
+        else ""
+    )
+    return (
+        '<div class="ai-block-heading">'
+        f"{kicker_html}"
+        f'<div class="ai-block-title">{escape(title)}</div>'
+        f"{caption_html}"
+        '</div>'
+    )
+
+
+def ai_summary_compact_html(summary_text, thesis_text):
+    return (
+        '<div class="ai-summary-card">'
+        '<div class="ai-summary-subtitle">Resume rapide de l\'analyse</div>'
+        f'<div class="ai-summary-text">{escape(summary_text)}</div>'
+        '<div class="ai-thesis-row">'
+        '<div class="ai-thesis-label">These retenue</div>'
+        f'<div class="ai-thesis-value">{escape(thesis_text)}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def ai_verdict_compact_html(title, variant, badge_label, risk_label, reason_text):
+    position_meta = verdict_positioning_meta(variant)
+    scale_labels = [
+        ("Fragile", "negative"),
+        ("Sous conditions", "warning"),
+        ("Favorable", "positive"),
+    ]
+    scale_html = "".join(
+        (
+            f'<div class="ai-verdict-scale-label {tone}'
+            f'{" active" if position_meta["active_scale"] == tone else ""}">{escape(label)}</div>'
+        )
+        for label, tone in scale_labels
+    )
+    building_windows = "".join("<span></span>" for _ in range(6))
+    return (
+        f'<div class="ai-verdict-card {variant}">'
+        '<div class="ai-verdict-layout">'
+        '<div class="ai-verdict-copy">'
+        '<div class="ai-verdict-head">'
+        '<div>'
+        '<div class="ai-verdict-kicker">Verdict final</div>'
+        f'<div class="ai-verdict-title">{escape(title)}</div>'
+        '</div>'
+        '<div class="ai-verdict-badges">'
+        f'<div class="ai-verdict-pill {variant}">{escape(badge_label)}</div>'
+        f'<div class="ai-verdict-pill {variant}">{escape(risk_label)}</div>'
+        '</div>'
+        '</div>'
+        f'<div class="ai-verdict-reason">{escape(reason_text)}</div>'
+        '</div>'
+        f'<div class="ai-verdict-visual {variant}">'
+        '<div class="ai-verdict-visual-label">Positionnement</div>'
+        '<div class="ai-verdict-approach">'
+        '<div class="ai-verdict-track-shell">'
+        '<div class="ai-verdict-lane"></div>'
+        f'<div class="ai-verdict-pointer {variant}" style="left: {position_meta["position_pct"]}%;">'
+        '<div class="ai-verdict-pointer-tag">Notre position</div>'
+        '<div class="ai-verdict-pointer-arrow">&#8595;</div>'
+        '</div>'
+        '</div>'
+        '<div class="ai-verdict-building">'
+        '<div class="ai-verdict-building-body">'
+        f'{building_windows}'
+        '<div class="ai-verdict-building-door"></div>'
+        '</div>'
+        '<div class="ai-verdict-building-label">Immeuble cible</div>'
+        '</div>'
+        '</div>'
+        f'<div class="ai-verdict-scale-line">{scale_html}</div>'
+        f'<div class="ai-verdict-visual-caption">{escape(position_meta["caption"])}</div>'
+        '</div>'
+        '</div>'
+    )
+
+
+def ai_verdict_flow_html(title, variant, badge_label, risk_label, reason_text, flow_text):
+    return ai_verdict_compact_html(title, variant, badge_label, risk_label, reason_text)
+
+
+def ai_diagnostic_card_html(title, subtitle, items, tone, empty_message):
+    if items:
+        rows_html = "".join(
+            (
+                f'<div class="ai-metric-row {item["tone"]}">'
+                '<div class="ai-metric-icon"></div>'
+                '<div class="ai-metric-content">'
+                '<div class="ai-metric-line">'
+                f'<div class="ai-metric-name">{escape(item["label"])}</div>'
+                f'<div class="ai-metric-value">{escape(item["value"])}</div>'
+                '</div>'
+                f'<div class="ai-metric-note">{escape(item["note"])}</div>'
+                '</div>'
+                '</div>'
+            )
+            for item in items
+        )
+    else:
+        rows_html = f'<div class="ai-metric-empty">{escape(empty_message)}</div>'
+
+    return (
+        f'<div class="ai-diagnostic-card {tone}">'
+        f'<div class="title">{escape(title)}</div>'
+        f'<div class="subtitle">{escape(subtitle)}</div>'
+        f"{rows_html}"
+        '</div>'
+    )
+
+
+def merge_action_plans(local_actions, ai_actions):
+    preferred_order = ["counter_offer", "down_payment", "rent_optimization"]
+    local_by_key = {action.get("action_key"): action for action in local_actions}
+    ai_by_key = {action.get("action_key"): action for action in ai_actions}
+    merged = []
+
+    for key in preferred_order:
+        local_action = local_by_key.get(key)
+        if not local_action:
+            continue
+        ai_action = ai_by_key.get(key, {})
+        merged_action = dict(local_action)
+        if ai_action.get("note"):
+            merged_action["note"] = ai_action["note"]
+        if ai_action.get("variant"):
+            merged_action["variant"] = ai_action["variant"]
+        merged_action["source"] = "ai" if ai_action else "rules"
+        merged.append(merged_action)
+
+    return merged
+
+
+def action_state_label(action):
+    state = action.get("state", "active")
+    if state == "optional":
+        return "Levier secondaire"
+    if state == "unavailable":
+        return "Scenario non calculable"
+    return "Levier actif"
+
+
+def render_premium_action_cards(actions):
+    if not actions:
+        return
+
+    primary_row = actions[:2]
+    secondary_row = actions[2:]
+
+    for row_index, action_row in enumerate([primary_row, secondary_row]):
+        if not action_row:
+            continue
+        if row_index == 0:
+            cols = st.columns(2, gap="large")
+        else:
+            cols = [st.container()]
+
+        for col, action in zip(cols, action_row):
+            with col:
+                meta_html = (
+                    '<div class="ai-plan-meta">'
+                    f'<div class="ai-plan-chip">Impact : {escape(action.get("impact_label", "N/A"))}</div>'
+                    f'<div class="ai-plan-chip">Faisabilite : {escape(action.get("feasibility_label", "N/A"))}</div>'
+                    '</div>'
+                )
+                card_html = (
+                    f'<div class="ai-plan-card {action.get("variant", "neutral")}">'
+                    '<div class="ai-plan-top">'
+                    f'<div class="ai-plan-rank">{escape(str(action.get("priority_rank", "")))}</div>'
+                    f'<div class="ai-plan-priority">{escape(action.get("priority_label", ""))}</div>'
+                    '</div>'
+                    f'<div class="ai-plan-title">{escape(action.get("label", ""))}</div>'
+                    f'<div class="ai-plan-value">{escape(action.get("value", ""))}</div>'
+                    f'<div class="ai-plan-state">{escape(action_state_label(action))}</div>'
+                    f"{meta_html}"
+                    f'<div class="ai-plan-note">{escape(excerpt_sentences(action.get("note", ""), 2))}</div>'
+                    '</div>'
+                )
+                st.markdown(card_html, unsafe_allow_html=True)
+
+
+def select_primary_action(actions):
+    for action in actions:
+        if action.get("state") == "active":
+            return action
+    return None
+
+
+def scenario_preview_html(action):
+    if not action:
+        return ""
+
+    preview = action.get("scenario_preview", {})
+    metric_defs = [
+        ("cap_rate", "Cap rate estime", "pct"),
+        ("csd", "CSD estime", "multiple"),
+        ("cashflow_annuel", "Cashflow estime", "money_year"),
+        ("rne", "RNE estime", "money"),
+    ]
+    metric_cards = []
+    for key, label, kind in metric_defs:
+        value = preview.get(key)
+        if value is None:
+            continue
+        metric_cards.append(
+            '<div class="ai-preview-metric">'
+            f'<div class="ai-preview-metric-label">{escape(label)}</div>'
+            f'<div class="ai-preview-metric-value">{escape(format_diagnostic_value(value, kind))}</div>'
+            '</div>'
+        )
+
+    if not metric_cards:
+        return ""
+
+    note = (
+        "Effet estime sur les indicateurs cles si cette action est appliquee avec les hypotheses actuelles."
+        if action.get("state") == "active"
+        else "Vue de controle avec les hypotheses actuelles du dossier."
+    )
+
+    return (
+        '<div class="ai-preview-shell">'
+        '<div class="ai-preview-kicker">Scenario apres ajustement</div>'
+        f'<div class="ai-preview-title">{escape(action.get("scenario_title", "Scenario estime"))}</div>'
+        f'<div class="ai-preview-note">{escape(note)}</div>'
+        f'<div class="ai-preview-grid">{"".join(metric_cards)}</div>'
         '</div>'
     )
 
@@ -2294,9 +3676,10 @@ with tab3:
 # TAB 4 — RATIOS & RECOMMANDATION
 # ─────────────────────────────────────────────────────────────────────────────
 with tab4:
+    verdict_banner_slot = st.empty()
     custom_subheader("🎯 Ratios financiers")
 
-    analyse_investissement = analyser_opportunite_investissement(
+    analyse_investissement_locale = analyser_opportunite_investissement(
         ratios=ratios,
         prix_achat=prix_achat,
         rne=resultats["rne"],
@@ -2337,7 +3720,7 @@ with tab4:
                 else:
                     valeur_str = f"{valeur:.2f}%"
 
-                explication = analyse_investissement["ratio_reviews"][cle]
+                explication = analyse_investissement_locale["ratio_reviews"][cle]
                 status = explication.get("status", "neutral")
                 if status == "positive":
                     color = "#16A34A"
@@ -2348,7 +3731,7 @@ with tab4:
                 else:
                     color = "#64748B"
 
-            explication = analyse_investissement["ratio_reviews"][cle]
+            explication = analyse_investissement_locale["ratio_reviews"][cle]
 
             with cols[j]:
                 st.markdown(
@@ -2399,6 +3782,10 @@ with tab4:
             loyer_equilibre_variant = "negative"
         if loyer_equilibre_par_logement is not None:
             loyer_equilibre_note += f" Environ {format_money(loyer_equilibre_par_logement)}/logement/mois."
+        loyer_equilibre_note += (
+            " Seuil minimal: il couvre les depenses et la dette (~CSD 1.00x), "
+            "sans marge de securite additionnelle."
+        )
 
     vacance_max_brute = (
         (1 - (cout_annuel_a_couvrir / resultats["revenus_bruts_annuels"])) * 100
@@ -2484,57 +3871,154 @@ with tab4:
             unsafe_allow_html=True,
         )
 
+    recommendation_context = {
+        "prix_achat": prix_achat,
+        "nb_logements": nb_logements,
+        "loyers_mensuels_total": loyers_mensuels_total,
+        "taux_vacance_pct": taux_vacance,
+        "ratios": ratios,
+        "year_one": {
+            "rne": resultats["rne"],
+            "revenus_bruts_annuels": resultats["revenus_bruts_annuels"],
+            "depenses_totales": resultats["depenses_totales"],
+            "paiement_annuel": resultats["paiement_annuel"],
+            "cashflow_annuel": cashflow_annuel,
+            "mise_de_fonds": resultats["mise_de_fonds"],
+            "frais_acquisition": resultats["frais_acquisition"],
+            "montant_pret": resultats["montant_pret"],
+        },
+        "decision_support": {
+            "loyer_equilibre_mensuel": loyer_equilibre_mensuel,
+            "loyer_equilibre_par_logement": loyer_equilibre_par_logement,
+            "vacance_max_supportable_pct": vacance_max_brute,
+            "apport_initial": apport_initial,
+        },
+    }
+    analyse_investissement_ia = get_recommendation_analysis(
+        analyse_investissement_locale,
+        recommendation_context,
+        AI_RECOMMENDATION_CACHE_VERSION,
+    )
+
     # Recommandation
     st.divider()
     custom_subheader("📝 Recommandation")
 
-    verdict = analyse_investissement["verdict"]
-    st.markdown(
-        decision_card_html(
-            verdict["label"],
-            verdict["value"],
-            verdict["note"],
-            verdict["variant"],
+    recommendation_source = analyse_investissement_ia.get("recommendation_source", {})
+    ai_recommended_actions = analyse_investissement_ia.get("ai_recommended_actions", [])
+    ai_mode = recommendation_source.get("mode") == "ai"
+    display_analysis = analyse_investissement_ia if ai_mode else analyse_investissement_locale
+    display_scenario = display_analysis.get(
+        "scenario",
+        analyse_investissement_locale.get("scenario", {}),
+    )
+    display_verdict = display_analysis.get(
+        "verdict",
+        analyse_investissement_locale.get("verdict", {}),
+    )
+    verdict_meta = verdict_presentation(
+        display_verdict.get("variant", "neutral"),
+        display_verdict.get("value", ""),
+    )
+
+    summary_text = excerpt_sentences(
+        recommendation_source.get("summary")
+        or display_scenario.get("summary")
+        or display_verdict.get("note"),
+        2,
+    )
+    thesis_summary = excerpt_sentences(display_scenario.get("summary", ""), 1)
+    thesis_text = (
+        f"{display_scenario.get('label', 'Lecture du dossier')} : {thesis_summary}"
+        if thesis_summary
+        else display_scenario.get("label", "These non disponible.")
+    )
+    verdict_reason = excerpt_sentences(display_verdict.get("note", ""), 1)
+    verdict_reason = verdict_reason.replace("Scenario:", "").strip()
+
+    verdict_banner_slot.markdown(
+        ai_verdict_flow_html(
+            verdict_meta["title"],
+            display_verdict.get("variant", "neutral"),
+            verdict_meta["badge"],
+            verdict_meta["risk"],
+            verdict_reason or "Lecture de risque non disponible.",
+            "Les ratios financiers ci-dessous montrent ce qui soutient ce verdict et ce qui le fragilise.",
         ),
         unsafe_allow_html=True,
     )
 
-    recap_cols = st.columns(2, gap="large")
-    with recap_cols[0]:
-        st.markdown("**Forces du dossier**")
-        if analyse_investissement["strengths"]:
-            for point in analyse_investissement["strengths"]:
-                st.markdown(f"- {point}")
-        else:
-            st.caption("Aucune force marquee ne ressort avec les seuils actuels.")
+    diagnostic_positive, diagnostic_vigilance = build_diagnostic_sections(
+        ratios,
+        analyse_investissement_locale,
+        cashflow_annuel,
+    )
+    plan_actions = merge_action_plans(
+        analyse_investissement_locale["actions"],
+        ai_recommended_actions if ai_mode else [],
+    )
+    primary_action = select_primary_action(plan_actions)
 
-    with recap_cols[1]:
-        st.markdown("**Points de vigilance**")
-        if analyse_investissement["risks"]:
-            for point in analyse_investissement["risks"]:
-                st.markdown(f"- {point}")
-        else:
-            st.caption("Aucun point de vigilance majeur n'est remonte par le moteur.")
+    st.markdown(
+        ai_summary_compact_html(
+            summary_text or "Aucune synthese courte n'a ete retournee pour ce dossier.",
+            thesis_text or "These non disponible.",
+        ),
+        unsafe_allow_html=True,
+    )
 
-    action_rows = [
-        analyse_investissement["actions"][:2],
-        analyse_investissement["actions"][2:],
-    ]
-    for action_row in action_rows:
-        action_cols = st.columns(2, gap="large")
-        for col, action in zip(action_cols, action_row):
-            with col:
-                st.markdown(
-                    decision_card_html(
-                        action["label"],
-                        action["value"],
-                        action["note"],
-                        action["variant"],
-                    ),
-                    unsafe_allow_html=True,
-                )
+    if recommendation_source.get("message") and not ai_mode:
+        st.warning(recommendation_source["message"])
 
-    for alert in analyse_investissement["alerts"]:
+    st.markdown(
+        ai_block_heading_html(
+            "",
+            "Forces et points de vigilance",
+            "Les indicateurs qui soutiennent le dossier et ceux qui demandent plus de prudence.",
+        ),
+        unsafe_allow_html=True,
+    )
+
+    diagnostic_cols = st.columns(2, gap="large")
+    with diagnostic_cols[0]:
+        st.markdown(
+            ai_diagnostic_card_html(
+                "Forces du dossier",
+                "Indicateurs qui soutiennent la these d'achat.",
+                diagnostic_positive,
+                "positive",
+                "Aucun point fort majeur n'est mis en evidence avec les seuils actuels.",
+            ),
+            unsafe_allow_html=True,
+        )
+    with diagnostic_cols[1]:
+        st.markdown(
+            ai_diagnostic_card_html(
+                "Points de vigilance",
+                "Elements qui fragilisent le montage ou la marge de securite.",
+                diagnostic_vigilance,
+                "warning",
+                "Aucun point de vigilance majeur n'est remonte sur les indicateurs principaux.",
+            ),
+            unsafe_allow_html=True,
+        )
+
+    st.markdown(
+        ai_block_heading_html(
+            "",
+            "Actions proposees",
+            "Trois leviers concrets pour ameliorer la decision ou securiser le montage.",
+        ),
+        unsafe_allow_html=True,
+    )
+
+    render_premium_action_cards(plan_actions)
+
+    preview_html = scenario_preview_html(primary_action)
+    if preview_html:
+        st.markdown(preview_html, unsafe_allow_html=True)
+
+    for alert in analyse_investissement_locale["alerts"]:
         if alert["variant"] == "negative":
             st.error(alert["message"])
         elif alert["variant"] == "positive":

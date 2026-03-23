@@ -5,6 +5,7 @@ numpy
 numpy-financial
 openrouteservice
 python-dotenv
+google-genai
 beautifulsoup4
 folium
 streamlit-folium
