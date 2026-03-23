@@ -1,6 +1,8 @@
 """
 app.py — Application Streamlit : Analyseur de Rentabilité Immobilière v2.0
 """
+from pathlib import Path
+
 import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
@@ -50,6 +52,16 @@ from dotenv import load_dotenv
 load_dotenv()
 
 AI_RECOMMENDATION_CACHE_VERSION = "2026-03-23-gemini-2-5-flash-v1"
+GUIDE_PDF_PATH = Path(__file__).resolve().parent / "docs" / "guide_application_rentabilite_immobiliere.pdf"
+
+
+@st.cache_data(show_spinner=False)
+def load_static_file_bytes(path_str: str, version: int | None = None):
+    _ = version
+    path = Path(path_str)
+    if not path.exists():
+        return None
+    return path.read_bytes()
 
 
 @st.cache_data(show_spinner=False, ttl=900)
@@ -131,6 +143,27 @@ st.markdown(
     .metric-card .value.positive { color: #16A34A; } /* Vert plus lisible sur fond blanc */
     .metric-card .value.negative { color: #DC2626; } /* Rouge plus lisible sur fond blanc */
     .metric-card .value.neutral  { color: #005A9C; } /* Bleu moyen IMVEST */
+
+    /* Bouton de téléchargement PDF */
+    div[data-testid="stDownloadButton"] > button {
+        background: linear-gradient(135deg, #002A54 0%, #005A9C 100%);
+        color: #FFFFFF;
+        border: none;
+        border-radius: 14px;
+        font-weight: 700;
+        padding: 0.85rem 1rem;
+        box-shadow: 0 10px 24px -16px rgba(0, 42, 84, 0.8);
+    }
+    div[data-testid="stDownloadButton"] > button:hover {
+        color: #FFFFFF;
+        border: none;
+        background: linear-gradient(135deg, #001E3C 0%, #004B82 100%);
+    }
+    div[data-testid="stDownloadButton"] > button:focus {
+        color: #FFFFFF;
+        border: none;
+        box-shadow: 0 0 0 0.2rem rgba(0, 90, 156, 0.18);
+    }
 
     /* Ratio card */
     .ratio-card {
@@ -2845,6 +2878,9 @@ def render_autofinancement_section(revenus_nets, depenses, rne, interets, capita
 # =============================================================================
 # TITRE ET LOGO
 # =============================================================================
+guide_pdf_version = GUIDE_PDF_PATH.stat().st_mtime_ns if GUIDE_PDF_PATH.exists() else None
+guide_pdf_bytes = load_static_file_bytes(str(GUIDE_PDF_PATH), guide_pdf_version)
+
 col_logo1, col_logo2, col_logo3 = st.columns([1, 2, 1])
 with col_logo2:
     try:
@@ -2866,6 +2902,26 @@ st.markdown(
 # SIDEBAR — HYPOTHÈSES
 # =============================================================================
 with st.sidebar:
+    if guide_pdf_bytes:
+        st.download_button(
+            "📄 Guide de l'application",
+            data=guide_pdf_bytes,
+            file_name=GUIDE_PDF_PATH.name,
+            mime="application/pdf",
+            key="download_guide_pdf",
+            use_container_width=True,
+            help="Télécharger le guide explicatif de l'application.",
+        )
+    else:
+        st.button(
+            "📄 Guide indisponible",
+            key="download_guide_pdf_missing",
+            disabled=True,
+            use_container_width=True,
+            help="Le guide PDF n'a pas encore été généré.",
+        )
+
+    st.markdown("<div style='height:0.4rem;'></div>", unsafe_allow_html=True)
     section_header("⚙️ Hypothèses")
 
     custom_subheader("Hypothèque")
