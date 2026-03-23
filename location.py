@@ -148,9 +148,11 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
     points = 0
     max_points = 100
     details = []
+    trajet_score_target = 55
     
     # 1. Analyse des trajets (55 points)
-    # Attribution: 11 pts max par service (5 services = 55 pts)
+    # Le bareme est volontairement plus faible pour les parcs, puis
+    # renormalise sur 55 pts pour garder un score global coherent /100.
     bareme_trajet = {
         "epicerie": 11,
         "primaire": 5,
@@ -159,11 +161,13 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
         "universite": 1,
         "pharmacie": 11,
         "bus": 11,
-        "parc": 11
+        "parc": 6
     }
-    
+    trajet_scale = trajet_score_target / sum(bareme_trajet.values())
+
     score_trajets = 0
     for service, max_pts in bareme_trajet.items():
+        max_pts_scaled = max_pts * trajet_scale
         trajet_info = trajets.get(service)
         if trajet_info and trajet_info.get("temps_min"):
             t = trajet_info["temps_min"]
@@ -172,11 +176,12 @@ def calculer_score_localisation_avance(trajets: dict, stats_demo: dict, lat: flo
             elif t <= 10: pts = max_pts * 0.5
             elif t <= 15: pts = max_pts * 0.2
             else: pts = 0
-            
-            score_trajets += pts
-            details.append({"critere": f"Proximité {service}", "points": round(pts, 1), "max": max_pts, "valeur": f"{t} min"})
+
+            pts_scaled = pts * trajet_scale
+            score_trajets += pts_scaled
+            details.append({"critere": f"Proximité {service}", "points": round(pts_scaled, 1), "max": round(max_pts_scaled, 1), "valeur": f"{t} min"})
         else:
-            details.append({"critere": f"Proximité {service}", "points": 0, "max": max_pts, "valeur": "Non trouvé / Inconnu"})
+            details.append({"critere": f"Proximité {service}", "points": 0, "max": round(max_pts_scaled, 1), "valeur": "Non trouvé / Inconnu"})
             
     points += score_trajets
     

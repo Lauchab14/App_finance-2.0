@@ -7,6 +7,7 @@ from typing import List, Dict, Optional, Tuple
 import math
 import os
 import re
+import unicodedata
 from urllib.parse import quote
 import openrouteservice
 from dotenv import load_dotenv
@@ -22,6 +23,8 @@ TOMTOM_LANGUAGE = "fr-CA"
 TOMTOM_COUNTRYSET = "CA"
 TOMTOM_MAX_RESULTS_PER_CATEGORY = 12
 TOMTOM_ROUTE_CANDIDATES = 8
+TOMTOM_CITY_COUNT_PAGE_SIZE = 100
+TOMTOM_CITY_COUNT_MAX_RESULTS = 400
 
 def _get_tomtom_api_key() -> str:
     """Retourne la cle TomTom nettoyee, sans guillemets parasites."""
@@ -370,6 +373,61 @@ def _normalize_service_name(value: str) -> str:
     return cleaned
 
 
+def _canonical_service_name(value: str) -> str:
+    """Normalise plus fortement un libelle pour comparer des variantes proches."""
+    text = unicodedata.normalize("NFKD", value or "")
+    text = "".join(ch for ch in text if not unicodedata.combining(ch))
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", " ", text)
+    text = re.sub(r"\s+", " ", text).strip()
+    return text
+
+
+def _service_name_tokens(value: str) -> set:
+    """Extrait les mots distinctifs d'un nom d'etablissement."""
+    stopwords = {
+        "de",
+        "du",
+        "des",
+        "la",
+        "le",
+        "les",
+        "et",
+        "campus",
+        "ecole",
+        "school",
+        "cegep",
+        "college",
+        "universite",
+        "university",
+        "centre",
+    }
+
+    tokens = set()
+    for token in _canonical_service_name(value).split():
+        if len(token) == 1 or token in stopwords:
+            continue
+        if len(token) > 4 and token.endswith("s"):
+            token = token[:-1]
+        tokens.add(token)
+    return tokens
+
+
+def _school_names_look_alike(name_a: str, name_b: str) -> bool:
+    """Repere les variantes de noms du meme etablissement scolaire."""
+    tokens_a = _service_name_tokens(name_a)
+    tokens_b = _service_name_tokens(name_b)
+    if not tokens_a or not tokens_b:
+        return False
+
+    shared = tokens_a & tokens_b
+    if len(shared) < 2:
+        return False
+
+    overlap_ratio = len(shared) / min(len(tokens_a), len(tokens_b))
+    return overlap_ratio >= 0.75
+
+
 def _service_text_blob(tags: dict, name: str) -> str:
     return " ".join(
         part for part in [
@@ -381,9 +439,44 @@ def _service_text_blob(tags: dict, name: str) -> str:
     )
 
 
+def _looks_like_grocery_name(name: str) -> bool:
+    """Repere les noms qui ressemblent clairement a une epicerie/supermarche."""
+    blob = _normalize_service_name(name)
+    positive_markers = [
+        "epicerie",
+        "épicerie",
+        "supermarche",
+        "supermarché",
+        "supermarket",
+        "market",
+        "marche",
+        "marché",
+        "grocer",
+        "grocery",
+        "iga",
+        "metro",
+        "super c",
+        "maxi",
+        "provigo",
+        "adonis",
+        "walmart",
+        "costco",
+        "marché tradition",
+        "marche tradition",
+        "bonichoix",
+        "valumart",
+        "marché ami",
+        "marche ami",
+        "intermarche",
+    ]
+    return any(marker in blob for marker in positive_markers)
+
+
 def _is_grocery_store(tags: dict, name: str) -> bool:
     shop = _normalize_service_name(tags.get("shop", ""))
-    if shop in {"supermarket", "grocery", "greengrocer"} and not _is_specialty_food_place(name):
+    if shop == "supermarket" and not _is_specialty_food_place(name):
+        return True
+    if shop in {"grocery", "greengrocer"} and _looks_like_grocery_name(name) and not _is_specialty_food_place(name):
         return True
 
     blob = _service_text_blob(tags, name)
@@ -405,7 +498,11 @@ def _is_grocery_store(tags: dict, name: str) -> bool:
         "intermarche",
     ]
     padded_blob = f" {blob} "
-    return any(marker in padded_blob for marker in grocery_markers) and not _is_specialty_food_place(name)
+    return (
+        any(marker in padded_blob for marker in grocery_markers)
+        and _looks_like_grocery_name(name)
+        and not _is_specialty_food_place(name)
+    )
 
 
 def _is_pharmacy(tags: dict, name: str) -> bool:
@@ -521,11 +618,20 @@ def _is_duplicate_service(existing: dict, candidate: dict, category: str) -> boo
     distance_km = _haversine(existing["lat"], existing["lon"], candidate["lat"], candidate["lon"])
     existing_name = _normalize_service_name(existing.get("nom", ""))
     candidate_name = _normalize_service_name(candidate.get("nom", ""))
+    existing_canonical = _canonical_service_name(existing.get("nom", ""))
+    candidate_canonical = _canonical_service_name(candidate.get("nom", ""))
 
     if category == "bus":
         if existing_name and candidate_name and existing_name == candidate_name and distance_km <= 0.25:
             return True
         return distance_km <= 0.09
+
+    if existing_canonical and candidate_canonical and existing_canonical == candidate_canonical and distance_km <= 0.25:
+        return True
+
+    if category in {"primaire", "secondaire", "cegep", "universite"}:
+        if _school_names_look_alike(existing.get("nom", ""), candidate.get("nom", "")) and distance_km <= 1.5:
+            return True
 
     if existing_name and candidate_name and existing_name == candidate_name and distance_km <= 0.12:
         return True
@@ -577,6 +683,28 @@ def _tomtom_search_poi(
     return data.get("results", [])
 
 
+def _tomtom_search_poi_bbox(
+    query: str,
+    top_left: str,
+    bottom_right: str,
+    limit: int = 100,
+    offset: int = 0,
+) -> dict:
+    return _tomtom_get(
+        f"/search/2/poiSearch/{quote(query, safe='')}.json",
+        params={
+            "limit": limit,
+            "ofs": offset,
+            "countrySet": TOMTOM_COUNTRYSET,
+            "language": TOMTOM_LANGUAGE,
+            "relatedPois": "off",
+            "topLeft": top_left,
+            "btmRight": bottom_right,
+        },
+        timeout=8,
+    )
+
+
 def _tomtom_result_name(result: dict) -> str:
     poi = result.get("poi", {}) or {}
     name = poi.get("name", "")
@@ -616,6 +744,113 @@ def _tomtom_result_blob(result: dict) -> str:
     return " ".join(_normalize_service_name(part) for part in parts if part)
 
 
+def _tomtom_city_bbox(ville: str) -> Optional[dict]:
+    """Recupere la bounding box TomTom d'une municipalite du Quebec."""
+    try:
+        results = _tomtom_get(
+            f"/search/2/geocode/{quote(f'{ville}, Quebec, Canada', safe='')}.json",
+            params={
+                "limit": 5,
+                "countrySet": TOMTOM_COUNTRYSET,
+                "language": TOMTOM_LANGUAGE,
+                "typeahead": "false",
+            },
+            timeout=8,
+        ).get("results", [])
+    except Exception:
+        return None
+
+    ville_norm = _normalize_service_name(ville)
+    for result in results:
+        address = result.get("address", {}) or {}
+        municipality = _normalize_service_name(address.get("municipality", ""))
+        entity_type = _normalize_service_name(result.get("entityType", ""))
+        bbox = result.get("boundingBox") or result.get("viewport") or {}
+        top_left = bbox.get("topLeftPoint") or {}
+        bottom_right = bbox.get("btmRightPoint") or {}
+
+        if not top_left or not bottom_right:
+            continue
+
+        if municipality != ville_norm:
+            continue
+
+        if entity_type not in {"municipality", "municipal district", "city"}:
+            continue
+
+        return {
+            "municipality": address.get("municipality", ville),
+            "top_left": f"{top_left.get('lat')},{top_left.get('lon')}",
+            "bottom_right": f"{bottom_right.get('lat')},{bottom_right.get('lon')}",
+        }
+
+    return None
+
+
+def _tomtom_same_municipality(result: dict, ville: str) -> bool:
+    address = result.get("address", {}) or {}
+    municipality = _normalize_service_name(address.get("municipality", ""))
+    subdivision = _normalize_service_name(address.get("municipalitySubdivision", ""))
+    ville_norm = _normalize_service_name(ville)
+    return municipality == ville_norm or subdivision == ville_norm
+
+
+def _tomtom_poi_identity(result: dict) -> str:
+    position = result.get("position", {}) or {}
+    lat = position.get("lat")
+    lon = position.get("lon")
+    name = _normalize_service_name(_tomtom_result_name(result))
+    return f"{name}|{lat:.5f}|{lon:.5f}" if lat is not None and lon is not None else name
+
+
+def _tomtom_count_matches(result: dict, markers: List[str]) -> bool:
+    blob = _tomtom_result_blob(result)
+    return any(marker in blob for marker in markers)
+
+
+def _tomtom_collect_city_pois(ville: str, queries: List[str], markers: List[str]) -> Optional[int]:
+    """Compte des POI TomTom dans une municipalite via bbox + filtre municipal."""
+    bbox = _tomtom_city_bbox(ville)
+    if not bbox:
+        return None
+
+    seen = set()
+
+    for query in queries:
+        offset = 0
+        while offset < TOMTOM_CITY_COUNT_MAX_RESULTS:
+            page_limit = min(TOMTOM_CITY_COUNT_PAGE_SIZE, TOMTOM_CITY_COUNT_MAX_RESULTS - offset)
+            if page_limit <= 0:
+                break
+
+            data = _tomtom_search_poi_bbox(
+                query=query,
+                top_left=bbox["top_left"],
+                bottom_right=bbox["bottom_right"],
+                limit=page_limit,
+                offset=offset,
+            )
+            results = data.get("results", [])
+            summary = data.get("summary", {}) or {}
+            total_results = int(summary.get("totalResults", 0) or 0)
+
+            if not results:
+                break
+
+            for result in results:
+                if not _tomtom_same_municipality(result, bbox["municipality"]):
+                    continue
+                if not _tomtom_count_matches(result, markers):
+                    continue
+                seen.add(_tomtom_poi_identity(result))
+
+            offset += len(results)
+            if offset >= total_results:
+                break
+
+    return len(seen)
+
+
 def _is_specialty_food_place(name: str) -> bool:
     """Exclut les commerces alimentaires trop specialises de la categorie epicerie."""
     blob = _normalize_service_name(name)
@@ -650,6 +885,13 @@ def _is_specialty_food_place(name: str) -> bool:
         "depanneur",
         "dépanneur",
         "convenience",
+        "hotel",
+        "hôtel",
+        "spa",
+        "auberge",
+        "motel",
+        "resort",
+        "boutique",
     ]
     return any(marker in blob for marker in exclusion_markers)
 
@@ -659,24 +901,15 @@ def _tomtom_matches_expected_category(category: str, result: dict) -> bool:
     name_blob = _normalize_service_name(_tomtom_result_name(result))
 
     if category == "epicerie":
-        is_core_grocery = any(
-            marker in blob
-            for marker in [
-                "supermarket",
-                "supermarkets hypermarkets",
-                "food drinks: grocers",
-                "grocer",
-                "grocery",
-                "iga",
-                "metro",
-                "super c",
-                "maxi",
-                "provigo",
-                "adonis",
-                "costco",
-            ]
+        is_supermarket_like = any(
+            marker in blob for marker in ["supermarket", "supermarkets hypermarkets", "iga", "metro", "super c", "maxi", "provigo", "adonis", "costco", "walmart"]
         )
-        return is_core_grocery and not _is_specialty_food_place(name_blob)
+        is_generic_grocer = any(marker in blob for marker in ["food drinks: grocers", "grocer", "grocery"])
+        if is_supermarket_like:
+            return not _is_specialty_food_place(name_blob)
+        if is_generic_grocer:
+            return _looks_like_grocery_name(name_blob) and not _is_specialty_food_place(name_blob)
+        return False
 
     if category == "pharmacie":
         return any(
@@ -852,6 +1085,8 @@ def _obtenir_tous_services_tomtom(lat: float, lon: float, rayon: int = 5000) -> 
         enriched = []
         for info in shortlisted:
             route_distance_km, route_time_min = _tomtom_route_metrics(lat, lon, info["lat"], info["lon"])
+            if route_distance_km > (rayon / 1000):
+                continue
             info["distance_km"] = route_distance_km
             info["temps_min"] = route_time_min
             enriched.append(info)
@@ -1013,7 +1248,7 @@ def obtenir_tous_services(lat: float, lon: float, rayon: int = 5000) -> Dict[str
 
 
 
-def obtenir_loisirs_ville(ville: str, lat: float, lon: float) -> dict:
+def _obtenir_loisirs_ville_osm(ville: str, lat: float, lon: float) -> dict:
     """
     Compte les restaurants, loisirs et stations-service dans les limites EXACTES
     de la municipalite via son relation-ID OSM (obtenu depuis Nominatim).
@@ -1127,4 +1362,40 @@ out center tags;
         "nb_essence": nb_essence,
         "methode":    methode,
     }
+
+
+def obtenir_loisirs_ville(ville: str, lat: float, lon: float) -> dict:
+    """
+    Compte restaurants, loisirs et stations-service en privilegiant TomTom,
+    tout en conservant le meme format de sortie pour l'UI.
+    """
+    if _tomtom_enabled():
+        try:
+            nb_restos = _tomtom_collect_city_pois(
+                ville,
+                queries=["restaurant", "fast food"],
+                markers=["restaurant", "fast food"],
+            )
+            nb_loisirs = _tomtom_collect_city_pois(
+                ville,
+                queries=["cinema", "sports center", "sports centre", "arena", "ice rink", "swimming pool"],
+                markers=["cinema", "sports center", "sports centre", "fitness club center", "arena", "ice rink", "swimming pool"],
+            )
+            nb_essence = _tomtom_collect_city_pois(
+                ville,
+                queries=["gas station", "petrol station"],
+                markers=["petrol station"],
+            )
+
+            if None not in (nb_restos, nb_loisirs, nb_essence):
+                return {
+                    "nb_restos": nb_restos,
+                    "nb_loisirs": nb_loisirs,
+                    "nb_essence": nb_essence,
+                    "methode": f"TomTom (municipalite filtree: {ville})",
+                }
+        except Exception as e:
+            print(f"TomTom obtenir_loisirs_ville indisponible, fallback OSM: {e}")
+
+    return _obtenir_loisirs_ville_osm(ville, lat, lon)
 
